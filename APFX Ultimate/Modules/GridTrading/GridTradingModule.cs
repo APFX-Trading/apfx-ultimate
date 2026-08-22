@@ -1,0 +1,251 @@
+namespace cAlgo.Robots;
+
+/// <summary>Manages a single, chart-symbol grid basket and adopts same-direction manual positions.</summary>
+public sealed class GridTradingModule : IRobotModule
+{
+    private const double AtrTargetAmountPerPip = 0.10;
+    private const string TargetLineName = "APFXUltimate.Target";
+    private const string LockLineName = "APFXUltimate.Lock";
+    private readonly GridConfiguration _config;
+    private readonly GridStatus _status;
+    private bool _closingBasket;
+    private double _startingEquity;
+    private double _anchorPrice;
+    private double _initialAtrPips;
+    private double _highWaterProfit;
+    private int _nextLevel = 1;
+    private TradeType? _activeDirection;
+
+    public GridTradingModule(GridConfiguration config, GridStatus status) { _config = config; _status = status; }
+    public string Name => nameof(GridTradingModule);
+
+    public void OnStart(RobotContext context)
+    {
+        UpdateVolumeInfo(context);
+        _status.Direction = _config.Direction;
+        _status.BaseTarget = _config.TargetProfit;
+        _status.TrailingLockPercent = _config.TrailingLockPercent;
+        _status.DistanceAmount = _config.DistanceAmount;
+        _status.UseAtr = _config.UseAtr;
+        _status.AtrPeriod = _config.AtrPeriod;
+        _status.MaxDrawdownPercent = _config.MaxDrawdownPercent;
+        var snapshot = context.GetMarketSnapshot();
+        _status.EffectiveTarget = GetEffectiveTarget(snapshot);
+        _status.StartingEquity = snapshot.Equity;
+        _status.CurrentEquity = _status.StartingEquity;
+        _status.EquityStop = _status.StartingEquity * (1 - _config.MaxDrawdownPercent / 100d);
+        _status.DrawdownRemaining = _status.StartingEquity - _status.EquityStop;
+        if (!_config.Enabled) return;
+        _status.State = "Waiting for manual position";
+        context.Log($"Grid armed ({_config.Direction}); waiting for a manual position.");
+    }
+
+    public void OnTick(RobotContext context)
+    {
+        if (!_config.Enabled) return;
+        var snapshot = context.GetMarketSnapshot();
+        UpdateVolumeInfo(context);
+        _status.EffectiveTarget = GetEffectiveTarget(snapshot);
+        _status.CurrentEquity = snapshot.Equity;
+        _status.DrawdownUsed = Math.Max(0, _status.StartingEquity - snapshot.Equity);
+        _status.DrawdownRemaining = Math.Max(0, snapshot.Equity - _status.EquityStop);
+        if (_closingBasket)
+        {
+            FinishClosingBasket(context, snapshot);
+            return;
+        }
+        if (_activeDirection is null)
+        {
+            foreach (var direction in GetAllowedDirections())
+            {
+                if (context.GetChartPositions(direction).Count == 0) continue;
+                _activeDirection = direction;
+                _startingEquity = snapshot.Equity;
+                _initialAtrPips = Math.Max(snapshot.AtrPips, 0.0001);
+                _anchorPrice = direction == TradeType.Buy ? snapshot.Ask : snapshot.Bid;
+                _status.EquityStop = _startingEquity * (1 - _config.MaxDrawdownPercent / 100d);
+                _status.StartingEquity = _startingEquity;
+                SynchronizePendingOrders(context, snapshot.SymbolName);
+                context.Log($"Grid adopted manual {direction} position.");
+                break;
+            }
+            if (_activeDirection is null) return;
+        }
+        var positions = context.GetChartPositions(_activeDirection.Value);
+        _status.BasketProfit = positions.Sum(p => p.NetProfit);
+        _status.EntriesPlaced = context.GetGridPendingOrders(LabelPrefix(snapshot.SymbolName)).Count;
+        _status.State = "Active";
+        if (positions.Count == 0)
+        {
+            ClearChartLines(context);
+            BeginBasketClose(context, positions, "all basket positions closed");
+            return;
+        }
+
+        if (snapshot.Equity <= _startingEquity * (1 - _config.MaxDrawdownPercent / 100d))
+        {
+            BeginBasketClose(context, positions, "equity drawdown limit"); return;
+        }
+
+        var profit = _status.BasketProfit;
+        var target = _status.EffectiveTarget;
+        if (profit >= target) _highWaterProfit = Math.Max(_highWaterProfit, profit);
+        _status.TrailingFloor = _highWaterProfit * _config.TrailingLockPercent / 100d;
+        if (_highWaterProfit > 0 && profit <= _highWaterProfit * _config.TrailingLockPercent / 100d)
+        {
+            BeginBasketClose(context, positions, "profit trailing lock"); return;
+        }
+
+        UpdateChartLines(context, snapshot, positions);
+        PlaceNextLevels(context, snapshot);
+    }
+
+    public void OnStop(RobotContext context) => ClearChartLines(context);
+
+    private void PlaceNextLevels(RobotContext context, MarketSnapshot snapshot)
+    {
+        var prefix = LabelPrefix(snapshot.SymbolName);
+        var existing = context.GetGridPendingOrders(prefix).OrderBy(order => order.Label).ToArray();
+
+        var info = context.GetTradeVolumeInfo();
+        var margin = _activeDirection!.Value == TradeType.Buy ? info.BuyEstimatedMargin : info.SellEstimatedMargin;
+        var pips = _config.DistanceAmount / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue) * AtrScale(snapshot);
+        while (_nextLevel <= _config.AdditionalEntries)
+        {
+            if (snapshot.FreeMargin < margin)
+            {
+                context.Log($"Grid stopped at level {_nextLevel}: insufficient free margin.");
+                return;
+            }
+
+            if (existing.Any(order => GetLevel(order.Label) == _nextLevel))
+            {
+                _nextLevel++;
+                continue;
+            }
+
+            var price = _activeDirection.Value == TradeType.Buy ? _anchorPrice - _nextLevel * pips * snapshot.PipSize : _anchorPrice + _nextLevel * pips * snapshot.PipSize;
+            var result = context.PlaceGridLimit(_activeDirection.Value, price, $"{prefix}.L{_nextLevel}");
+            if (!result.IsSuccessful)
+            {
+                context.Log($"Grid level {_nextLevel} failed: {result.Error}");
+                return;
+            }
+
+            _nextLevel++;
+        }
+    }
+
+    private void SynchronizePendingOrders(RobotContext context, string symbolName)
+    {
+        var pendingOrders = context.GetGridPendingOrders(LabelPrefix(symbolName))
+            .OrderBy(order => GetLevel(order.Label))
+            .ToArray();
+
+        foreach (var surplusOrder in pendingOrders.Skip(_config.AdditionalEntries))
+        {
+            context.CancelPendingOrder(surplusOrder);
+        }
+
+        var highestLevel = pendingOrders.Take(_config.AdditionalEntries).Select(order => GetLevel(order.Label)).DefaultIfEmpty(0).Max();
+        _nextLevel = highestLevel + 1;
+    }
+
+    private void BeginBasketClose(RobotContext context, IReadOnlyList<Position> positions, string reason)
+    {
+        _closingBasket = true;
+        _status.State = $"Closing: {reason}";
+        ClearChartLines(context);
+        foreach (var p in positions) context.ClosePosition(p);
+        CancelBasketPendingOrders(context, context.GetMarketSnapshot().SymbolName);
+        context.Log($"Grid closing: {reason}.");
+    }
+    private void FinishClosingBasket(RobotContext context, MarketSnapshot snapshot)
+    {
+        if (_activeDirection is null)
+        {
+            _closingBasket = false;
+            return;
+        }
+
+        var positions = context.GetChartPositions(_activeDirection.Value);
+        var pendingOrders = context.GetGridPendingOrders(LabelPrefix(snapshot.SymbolName));
+        foreach (var order in pendingOrders)
+        {
+            context.CancelPendingOrder(order);
+        }
+
+        if (positions.Count > 0 || pendingOrders.Count > 0)
+        {
+            return;
+        }
+
+        ResetBasket();
+        _closingBasket = false;
+        _status.EntriesPlaced = 0;
+        _status.BasketProfit = 0;
+        _status.TrailingFloor = 0;
+        _status.State = "Waiting for manual position";
+        context.Log("Grid rearmed; waiting for a manual position.");
+    }
+    private void CancelBasketPendingOrders(RobotContext context, string symbolName)
+    {
+        foreach (var order in context.GetGridPendingOrders(LabelPrefix(symbolName))) context.CancelPendingOrder(order);
+    }
+    private void ResetBasket()
+    {
+        _activeDirection = null;
+        _nextLevel = 1;
+        _highWaterProfit = 0;
+        _startingEquity = 0;
+        _anchorPrice = 0;
+        _initialAtrPips = 0;
+    }
+    private void UpdateChartLines(RobotContext context, MarketSnapshot snapshot, IReadOnlyList<Position> positions)
+    {
+        var totalVolume = positions.Sum(position => position.VolumeInUnits);
+        if (totalVolume <= 0)
+        {
+            ClearChartLines(context);
+            return;
+        }
+
+        var direction = _activeDirection!.Value;
+        var currentPrice = direction == TradeType.Buy ? snapshot.Bid : snapshot.Ask;
+        var currentProfit = positions.Sum(position => position.NetProfit);
+        context.DrawHorizontalLine(TargetLineName, GetProfitPrice(currentPrice, _status.EffectiveTarget, direction, currentProfit, totalVolume, snapshot), Color.FromHex("#FF28B9F5"));
+
+        if (_status.TrailingFloor > 0)
+        {
+            context.DrawHorizontalLine(LockLineName, GetProfitPrice(currentPrice, _status.TrailingFloor, direction, currentProfit, totalVolume, snapshot), Color.FromHex("#FFFFB74D"));
+        }
+        else
+        {
+            context.RemoveChartObject(LockLineName);
+        }
+    }
+    private static double GetProfitPrice(double currentPrice, double desiredProfit, TradeType direction, double currentProfit, double volumeInUnits, MarketSnapshot snapshot)
+    {
+        var pipsToDesiredProfit = (desiredProfit - currentProfit) / Math.Max(0.00000001, volumeInUnits * snapshot.PipValue);
+        return direction == TradeType.Buy
+            ? currentPrice + pipsToDesiredProfit * snapshot.PipSize
+            : currentPrice - pipsToDesiredProfit * snapshot.PipSize;
+    }
+    private static void ClearChartLines(RobotContext context)
+    {
+        context.RemoveChartObject(TargetLineName);
+        context.RemoveChartObject(LockLineName);
+    }
+    private double AtrScale(MarketSnapshot s) => _config.UseAtr ? Math.Max(0.1, s.AtrPips / _initialAtrPips) : 1;
+    private double GetEffectiveTarget(MarketSnapshot snapshot) => _config.UseAtr
+        ? snapshot.AtrPips * AtrTargetAmountPerPip
+        : _config.TargetProfit;
+    private static int GetLevel(string label)
+    {
+        var markerIndex = label.LastIndexOf(".L", StringComparison.Ordinal);
+        return markerIndex >= 0 && int.TryParse(label[(markerIndex + 2)..], out var level) ? level : 0;
+    }
+    private void UpdateVolumeInfo(RobotContext context) { var volume=context.GetTradeVolumeInfo(); _status.VolumeInLots=volume.VolumeInLots; _status.BuyMargin=volume.BuyEstimatedMargin; _status.SellMargin=volume.SellEstimatedMargin; }
+    private IEnumerable<TradeType> GetAllowedDirections() => _config.Direction switch { GridDirection.Buy => new[] { TradeType.Buy }, GridDirection.Sell => new[] { TradeType.Sell }, _ => new[] { TradeType.Buy, TradeType.Sell } };
+    private string LabelPrefix(string symbol) => $"APFXUltimate.Grid.{symbol}.{_activeDirection}";
+}
