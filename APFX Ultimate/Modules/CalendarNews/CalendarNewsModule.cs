@@ -8,7 +8,8 @@ namespace cAlgo.Robots;
 public sealed class CalendarNewsModule : IRobotModule
 {
     private const string Endpoint = "https://apforextrading.com/api/calendar/next";
-    private const int MaximumNewsItems = 5;
+    private const int MaximumNewsItems = 100;
+    private const int MaximumFutureNewsItems = 5;
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
     private readonly CalendarNewsConfiguration _configuration;
@@ -109,8 +110,9 @@ public sealed class CalendarNewsModule : IRobotModule
                 return;
             }
 
-            var items = ParseItems(response.Body);
-            _state.SetItems(items, new DateTimeOffset(context.ServerTime));
+            var items = SelectDisplayItems(ParseItems(response.Body), context);
+            var updatedAtUtc = DateTimeOffset.UtcNow;
+            _state.SetItems(items, updatedAtUtc, context.ConvertUtcToChartTime(updatedAtUtc.UtcDateTime));
         }
         catch (JsonException exception)
         {
@@ -156,5 +158,20 @@ public sealed class CalendarNewsModule : IRobotModule
         }
 
         return items.OrderBy(item => item.Time).ToArray();
+    }
+
+    private static IReadOnlyList<CalendarNewsItem> SelectDisplayItems(IReadOnlyList<CalendarNewsItem> items, RobotContext context)
+    {
+        var chartNow = context.ConvertUtcToChartTime(DateTime.UtcNow);
+        var todayItems = items
+            .Where(item => context.ConvertUtcToChartTime(item.Time.UtcDateTime).Date == chartNow.Date);
+        var futureItems = items
+            .Where(item => context.ConvertUtcToChartTime(item.Time.UtcDateTime).Date > chartNow.Date)
+            .Take(MaximumFutureNewsItems);
+
+        return todayItems
+            .Concat(futureItems)
+            .OrderBy(item => item.Time)
+            .ToArray();
     }
 }

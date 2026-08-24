@@ -5,7 +5,7 @@ namespace cAlgo.Robots;
 /// </summary>
 public sealed class TradingControlsSection
 {
-    private const double ActionButtonWidth = 94;
+    private const double ActionButtonWidth = 125;
     private readonly Action _refreshStatistics;
     private readonly double _fontSize;
 
@@ -37,15 +37,15 @@ public sealed class TradingControlsSection
         {
             Text = text,
             Width = width,
-            Height = Math.Max(30, _fontSize * 2),
-            Margin = new Thickness(3, 6, 3, 2),
+            Height = Math.Max(38, _fontSize * 2.35),
+            Margin = new Thickness(4, 7, 4, 3),
             BackgroundColor = Color.FromHex(backgroundColor),
             ForegroundColor = Color.White,
             BorderColor = Color.FromHex(borderColor),
             BorderThickness = 1,
             CornerRadius = 3,
             FontWeight = FontWeight.Bold,
-            FontSize = _fontSize,
+            FontSize = _fontSize + 1,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center
         };

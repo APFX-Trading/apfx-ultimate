@@ -5,7 +5,8 @@ namespace cAlgo.Robots;
 /// </summary>
 public sealed class CalendarNewsSection
 {
-    private const int MaximumRows = 5;
+    private const int MaximumEvents = 5;
+    private const int MaximumRows = MaximumEvents * 2;
     private readonly double _fontSize;
     private readonly CalendarNewsState _state;
     private readonly List<NewsRow> _newsRows = new();
@@ -18,7 +19,7 @@ public sealed class CalendarNewsSection
         _state = state;
     }
 
-    public ControlBase CreateControl()
+    public ControlBase CreateControl(RobotContext context)
     {
         var section = new Grid(3, 1)
         {
@@ -68,11 +69,11 @@ public sealed class CalendarNewsSection
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalAlignment = VerticalAlignment.Stretch
         }, 2, 0);
-        Refresh();
+        Refresh(context);
         return section;
     }
 
-    public void Refresh()
+    public void Refresh(RobotContext context)
     {
         if (_statusText is null || _renderedVersion == _state.Version)
         {
@@ -80,26 +81,38 @@ public sealed class CalendarNewsSection
         }
 
         _statusText.Text = _state.Status;
+        var rowIndex = 0;
         DateOnly? previousDate = null;
-        for (var index = 0; index < _newsRows.Count; index++)
+        var chartNow = context.ConvertUtcToChartTime(DateTime.UtcNow);
+        foreach (var item in _state.Items
+            .Where(item => context.ConvertUtcToChartTime(item.Time.UtcDateTime) >= chartNow)
+            .Take(MaximumEvents))
         {
-            var row = _newsRows[index];
-            if (index >= _state.Items.Count)
+            var chartTime = context.ConvertUtcToChartTime(item.Time.UtcDateTime);
+            var itemDate = DateOnly.FromDateTime(chartTime);
+            if (itemDate != previousDate && rowIndex < _newsRows.Count)
             {
-                row.Clear();
-                continue;
+                _newsRows[rowIndex].SetDate(chartTime.ToString("ddd dd MMM"));
+                rowIndex++;
             }
 
-            var item = _state.Items[index];
-            var localTime = item.Time.ToLocalTime();
-            var itemDate = DateOnly.FromDateTime(localTime.DateTime);
-            row.Time.Text = itemDate == previousDate
-                ? localTime.ToString("HH:mm")
-                : localTime.ToString("ddd dd MMM\nHH:mm");
+            if (rowIndex >= _newsRows.Count)
+            {
+                break;
+            }
+
+            var row = _newsRows[rowIndex];
+            row.Time.Text = chartTime.ToString("HH:mm");
             row.Event.Text = $"{item.Currency} {item.Name}";
             row.Impact.Text = GetImpactLabel(item.Importance);
             row.Impact.ForegroundColor = Color.FromHex(GetImpactColor(item.Importance));
             previousDate = itemDate;
+            rowIndex++;
+        }
+
+        for (; rowIndex < _newsRows.Count; rowIndex++)
+        {
+            _newsRows[rowIndex].Clear();
         }
 
         _renderedVersion = _state.Version;
@@ -136,6 +149,13 @@ public sealed class CalendarNewsSection
 
     private sealed record NewsRow(TextBlock Time, TextBlock Event, TextBlock Impact)
     {
+        public void SetDate(string date)
+        {
+            Time.Text = date;
+            Event.Text = string.Empty;
+            Impact.Text = string.Empty;
+        }
+
         public void Clear()
         {
             Time.Text = string.Empty;
