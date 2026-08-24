@@ -319,7 +319,7 @@ public partial class APFXUltimate : Robot
             marketHoursOverlay,
             emaOverlay,
             bollingerBandsOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, GridUseAtr, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay)
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay)
         });
 
         _modules.Start(context);

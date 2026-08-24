@@ -37,8 +37,8 @@ public sealed class TradingControlsSection
         {
             Text = text,
             Width = width,
-            Height = Math.Max(38, _fontSize * 2.35),
-            Margin = new Thickness(4, 7, 4, 3),
+            Height = Math.Max(32, _fontSize * 2),
+            Margin = new Thickness(4, 5, 4, 2),
             BackgroundColor = Color.FromHex(backgroundColor),
             ForegroundColor = Color.White,
             BorderColor = Color.FromHex(borderColor),

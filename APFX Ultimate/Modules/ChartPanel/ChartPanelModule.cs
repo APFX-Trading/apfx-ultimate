@@ -9,7 +9,6 @@ public sealed class ChartPanelModule : IRobotModule
     private readonly double _fontSize;
     private readonly GridStatus? _gridStatus;
     private readonly int _atrPeriod;
-    private readonly bool _atrScalingEnabled;
     private readonly CalendarNewsState _calendarNewsState;
     private readonly MarketHoursOverlayModule _marketHoursOverlay;
     private readonly EmaOverlayModule _emaOverlay;
@@ -23,13 +22,12 @@ public sealed class ChartPanelModule : IRobotModule
     private GraphControlsSection? _graphControls;
     private RobotContext? _context;
 
-    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, bool atrScalingEnabled, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay)
+    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay)
     {
         _position = position;
         _fontSize = fontSize;
         _gridStatus = gridStatus;
         _atrPeriod = atrPeriod;
-        _atrScalingEnabled = atrScalingEnabled;
         _calendarNewsState = calendarNewsState;
         _marketHoursOverlay = marketHoursOverlay;
         _emaOverlay = emaOverlay;
@@ -47,28 +45,26 @@ public sealed class ChartPanelModule : IRobotModule
         layoutGrid.Columns[1].SetWidthInStars(1.5);
         var primaryColumn = new Grid(2, 1);
         primaryColumn.Rows[0].SetHeightToAuto();
-        primaryColumn.Rows[1].SetHeightInStars(1);
+        primaryColumn.Rows[1].SetHeightToAuto();
 
         _accountStatistics = new AccountStatisticsSection();
         _accountStatistics.TrackDrawdown(context);
         _openPositionStatistics = new OpenPositionStatisticsSection(_fontSize, _gridStatus);
         _tradingControls = new TradingControlsSection(_fontSize, () => RefreshAccountData(context));
-        _indicatorStatus = new IndicatorStatusSection(_fontSize, _atrPeriod, _atrScalingEnabled);
+        _indicatorStatus = new IndicatorStatusSection(_fontSize, _atrPeriod);
         _calendarNews = new CalendarNewsSection(_fontSize, _calendarNewsState);
         _graphControls = new GraphControlsSection(_fontSize, _marketHoursOverlay, _emaOverlay, _bollingerBandsOverlay);
         var liveStatusSection = ChartPanelLayout.CreateSection(_openPositionStatistics.CreateControl(context));
         var performanceSection = ChartPanelLayout.CreateSection(_accountStatistics.CreateControl(context, _fontSize));
-        performanceSection.VerticalAlignment = VerticalAlignment.Stretch;
         primaryColumn.AddChild(liveStatusSection, 0, 0);
         primaryColumn.AddChild(performanceSection, 1, 0);
 
         var rightColumn = new Grid(3, 1);
-        rightColumn.Rows[0].SetHeightInStars(1);
+        rightColumn.Rows[0].SetHeightToAuto();
         rightColumn.Rows[1].SetHeightToAuto();
         rightColumn.Rows[2].SetHeightToAuto();
         var calendarSection = ChartPanelLayout.CreateSection(_calendarNews.CreateControl(context));
         calendarSection.Margin = new Thickness(8, 7, 0, 0);
-        calendarSection.VerticalAlignment = VerticalAlignment.Stretch;
         var indicatorsSection = ChartPanelLayout.CreateSection(_indicatorStatus.CreateControl(context));
         indicatorsSection.Margin = new Thickness(8, 7, 0, 0);
         var graphSection = ChartPanelLayout.CreateSection(_graphControls.CreateControl());

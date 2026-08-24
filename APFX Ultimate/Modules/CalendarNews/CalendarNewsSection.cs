@@ -5,8 +5,8 @@ namespace cAlgo.Robots;
 /// </summary>
 public sealed class CalendarNewsSection
 {
-    private const int MaximumEvents = 5;
-    private const int MaximumRows = MaximumEvents * 2;
+    private const int MaximumEvents = 8;
+    private const int MaximumRows = MaximumEvents + 2;
     private readonly double _fontSize;
     private readonly CalendarNewsState _state;
     private readonly List<NewsRow> _newsRows = new();
@@ -23,11 +23,11 @@ public sealed class CalendarNewsSection
     {
         var section = new Grid(3, 1)
         {
-            VerticalAlignment = VerticalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Top
         };
         section.Rows[0].SetHeightToAuto();
         section.Rows[1].SetHeightToAuto();
-        section.Rows[2].SetHeightInStars(1);
+        section.Rows[2].SetHeightToAuto();
         section.AddChild(new TextBlock
         {
             Text = "Calendar News",
@@ -45,20 +45,22 @@ public sealed class CalendarNewsSection
         };
         section.AddChild(_statusText, 1, 0);
 
-        var newsGrid = new Grid(MaximumRows + 1, 3);
+        var newsGrid = new Grid(MaximumRows + 1, 4);
         foreach (var row in newsGrid.Rows)
         {
             row.SetHeightToAuto();
         }
         AddCell(newsGrid, "When", 0, 0, true);
         AddCell(newsGrid, "Event", 0, 1, true);
-        AddCell(newsGrid, "Impact", 0, 2, true);
+        AddCell(newsGrid, "Results", 0, 2, true);
+        AddCell(newsGrid, "Impact", 0, 3, true);
         for (var row = 1; row <= MaximumRows; row++)
         {
             _newsRows.Add(new NewsRow(
                 AddCell(newsGrid, string.Empty, row, 0, false),
                 AddCell(newsGrid, string.Empty, row, 1, false),
-                AddCell(newsGrid, string.Empty, row, 2, false)));
+                AddCell(newsGrid, string.Empty, row, 2, false),
+                AddCell(newsGrid, string.Empty, row, 3, false)));
         }
 
         section.AddChild(new ScrollViewer
@@ -67,7 +69,7 @@ public sealed class CalendarNewsSection
             BackgroundColor = Color.FromHex("#FF112237"),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalAlignment = VerticalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Top
         }, 2, 0);
         Refresh(context);
         return section;
@@ -83,9 +85,7 @@ public sealed class CalendarNewsSection
         _statusText.Text = _state.Status;
         var rowIndex = 0;
         DateOnly? previousDate = null;
-        var chartNow = context.ConvertUtcToChartTime(DateTime.UtcNow);
         foreach (var item in _state.Items
-            .Where(item => context.ConvertUtcToChartTime(item.Time.UtcDateTime) >= chartNow)
             .Take(MaximumEvents))
         {
             var chartTime = context.ConvertUtcToChartTime(item.Time.UtcDateTime);
@@ -104,6 +104,7 @@ public sealed class CalendarNewsSection
             var row = _newsRows[rowIndex];
             row.Time.Text = chartTime.ToString("HH:mm");
             row.Event.Text = $"{item.Currency} {item.Name}";
+            row.Results.Text = FormatResults(item);
             row.Impact.Text = GetImpactLabel(item.Importance);
             row.Impact.ForegroundColor = Color.FromHex(GetImpactColor(item.Importance));
             previousDate = itemDate;
@@ -147,12 +148,21 @@ public sealed class CalendarNewsSection
         _ => "#FFBDEBFF"
     };
 
-    private sealed record NewsRow(TextBlock Time, TextBlock Event, TextBlock Impact)
+    private static string FormatResults(CalendarNewsItem item)
+    {
+        var actual = string.IsNullOrWhiteSpace(item.Actual) ? "-" : item.Actual;
+        var forecast = string.IsNullOrWhiteSpace(item.Forecast) ? "-" : item.Forecast;
+        var previous = string.IsNullOrWhiteSpace(item.Previous) ? "-" : item.Previous;
+        return $"A:{actual} F:{forecast} P:{previous}";
+    }
+
+    private sealed record NewsRow(TextBlock Time, TextBlock Event, TextBlock Results, TextBlock Impact)
     {
         public void SetDate(string date)
         {
             Time.Text = date;
             Event.Text = string.Empty;
+            Results.Text = string.Empty;
             Impact.Text = string.Empty;
         }
 
@@ -160,6 +170,7 @@ public sealed class CalendarNewsSection
         {
             Time.Text = string.Empty;
             Event.Text = string.Empty;
+            Results.Text = string.Empty;
             Impact.Text = string.Empty;
             Impact.ForegroundColor = Color.FromHex("#FFFFFFFF");
         }

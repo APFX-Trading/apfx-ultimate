@@ -32,7 +32,7 @@ public sealed class OpenPositionStatisticsSection
             HorizontalAlignment = HorizontalAlignment.Center
         });
 
-        var rowCount = _gridStatus is null ? 7 : 13;
+        var rowCount = _gridStatus is null ? 7 : 12;
         var grid = new Grid(rowCount, 2)
         {
             Margin = new Thickness(0, 4, 0, 0)
@@ -46,16 +46,15 @@ public sealed class OpenPositionStatisticsSection
             AddRow(grid, "Target ($)", 4);
             AddRow(grid, "Trail Lock", 5);
             AddRow(grid, "Trail ($)", 6);
-            AddRow(grid, "Grid Pending", 7);
-            AddRow(grid, "Distance ($)", 8);
+            AddRow(grid, "Distance ($)", 7);
         }
-        AddRow(grid, "Equity", _gridStatus is null ? 4 : 9);
+        AddRow(grid, "Equity", _gridStatus is null ? 4 : 8);
         if (_gridStatus is not null)
         {
-            AddRow(grid, "Drawdown Left", 10);
+            AddRow(grid, "Drawdown Left", 9);
         }
-        AddRow(grid, "Margin Used", _gridStatus is null ? 5 : 11);
-        AddRow(grid, "Margin Free", _gridStatus is null ? 6 : 12);
+        AddRow(grid, "Margin Used", _gridStatus is null ? 5 : 10);
+        AddRow(grid, "Margin Free", _gridStatus is null ? 6 : 11);
 
         section.AddChild(grid);
         Refresh(context);
@@ -86,7 +85,6 @@ public sealed class OpenPositionStatisticsSection
         if (_gridStatus is not null)
         {
             _valueCells["Target ($)"].Text = FormatAmount(_gridStatus.EffectiveTarget > 0 ? _gridStatus.EffectiveTarget : _gridStatus.BaseTarget);
-            _valueCells["Grid Pending"].Text = _gridStatus.EntriesPlaced.ToString();
             _valueCells["Distance ($)"].Text = FormatAmount(_gridStatus.DistanceAmount);
             _valueCells["Trail Lock"].Text = _gridStatus.TrailingLockPercent.ToString("N0") + "%";
             var configuredTrailAmount = (_gridStatus.EffectiveTarget > 0 ? _gridStatus.EffectiveTarget : _gridStatus.BaseTarget)

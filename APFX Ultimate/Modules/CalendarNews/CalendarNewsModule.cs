@@ -64,7 +64,7 @@ public sealed class CalendarNewsModule : IRobotModule
             return;
         }
 
-        var request = new HttpRequest(new Uri($"{Endpoint}?hours={_configuration.HoursAhead}&limit={MaximumNewsItems}&compact=1"))
+        var request = new HttpRequest(new Uri($"{Endpoint}?hours={_configuration.HoursAhead}&limit={MaximumNewsItems}"))
         {
             Timeout = RequestTimeout,
             Version = new Version(1, 1)
@@ -154,10 +154,27 @@ public sealed class CalendarNewsModule : IRobotModule
                 continue;
             }
 
-            items.Add(new CalendarNewsItem(time, currency, name, importance));
+            items.Add(new CalendarNewsItem(
+                time,
+                currency,
+                name,
+                importance,
+                GetOptionalValue(item, "actual"),
+                GetOptionalValue(item, "forecast"),
+                GetOptionalValue(item, "previous")));
         }
 
         return items.OrderBy(item => item.Time).ToArray();
+    }
+
+    private static string? GetOptionalValue(JsonElement item, string propertyName)
+    {
+        if (!item.TryGetProperty(propertyName, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
     }
 
     private static IReadOnlyList<CalendarNewsItem> SelectDisplayItems(IReadOnlyList<CalendarNewsItem> items, RobotContext context)

@@ -151,7 +151,7 @@ public sealed class AccountStatisticsSection
             ForegroundColor = isHeader ? Color.FromHex("#FFBDEBFF") : Color.White,
             FontWeight = isHeader ? FontWeight.ExtraBold : FontWeight.Normal,
             FontSize = fontSize,
-            Margin = new Thickness(2)
+            Margin = column == 0 ? new Thickness(2) : new Thickness(6, 2, 2, 2)
         };
         grid.AddChild(cell, row, column);
         return cell;

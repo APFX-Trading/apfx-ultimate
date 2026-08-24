@@ -1,7 +1,7 @@
 namespace cAlgo.Robots;
 
 /// <summary>
-/// Draws upcoming calendar events on the chart. Events sharing a timestamp are represented by one line and label.
+/// Draws calendar events on the chart. Simultaneous events share an impact-priority line but keep separate labels.
 /// </summary>
 public sealed class CalendarNewsChartOverlayModule : IRobotModule
 {
@@ -56,6 +56,11 @@ public sealed class CalendarNewsChartOverlayModule : IRobotModule
             .ToArray();
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
 
+        var labelCount = groups.Sum(group => group.Count());
+        var labelRow = 0;
+        // Keep every release on an individual row while reserving the lower chart area for price action.
+        var rowSpacing = Math.Min(0.045, 0.72 / Math.Max(1, labelCount));
+
         for (var groupIndex = 0; groupIndex < groups.Length; groupIndex++)
         {
             var group = groups[groupIndex];
@@ -63,16 +68,21 @@ public sealed class CalendarNewsChartOverlayModule : IRobotModule
             var color = GetImpactColor(importance);
             var key = group.Key.ToString("yyyyMMddHHmmss");
             var lineName = ObjectPrefix + key + ".line";
-            var labelName = ObjectPrefix + key + ".label";
-            var eventText = string.Join(" · ", group.Select(item => $"{item.Currency} {item.Name}"));
             var displayedTime = _context.ConvertUtcToChartTime(group.Key);
-            var label = $"{displayedTime:ddd HH:mm}  {eventText}";
-            var labelPrice = viewport.TopPrice - labelRange * (0.04 + (groupIndex % 3) * 0.07);
 
             _context.DrawGraphVerticalLine(lineName, group.Key, color, importance >= 3 ? 2 : 1, LineStyle.Dots);
-            _context.DrawChartText(labelName, label, group.Key, labelPrice, color);
             activeNames.Add(lineName);
-            activeNames.Add(labelName);
+
+            foreach (var item in group.OrderByDescending(item => item.Importance).ThenBy(item => item.Currency).ThenBy(item => item.Name))
+            {
+                var labelName = ObjectPrefix + key + ".label." + labelRow;
+                var results = FormatResults(item);
+                var label = $"{displayedTime:ddd HH:mm}  {item.Currency} {item.Name}{results}";
+                var labelPrice = viewport.TopPrice - labelRange * (0.04 + labelRow * rowSpacing);
+                _context.DrawChartText(labelName, label, group.Key, labelPrice, GetImpactColor(item.Importance));
+                activeNames.Add(labelName);
+                labelRow++;
+            }
         }
 
         foreach (var staleName in _objectNames.Except(activeNames).ToArray())
@@ -106,4 +116,17 @@ public sealed class CalendarNewsChartOverlayModule : IRobotModule
         2 => Color.FromHex("#FFF7B955"),
         _ => Color.FromHex("#FF6FCBFF")
     };
+
+    private static string FormatResults(CalendarNewsItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Actual) && string.IsNullOrWhiteSpace(item.Forecast) && string.IsNullOrWhiteSpace(item.Previous))
+        {
+            return string.Empty;
+        }
+
+        var actual = string.IsNullOrWhiteSpace(item.Actual) ? "-" : item.Actual;
+        var forecast = string.IsNullOrWhiteSpace(item.Forecast) ? "-" : item.Forecast;
+        var previous = string.IsNullOrWhiteSpace(item.Previous) ? "-" : item.Previous;
+        return $"  |  A:{actual} F:{forecast} P:{previous}";
+    }
 }

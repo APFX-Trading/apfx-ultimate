@@ -7,7 +7,6 @@ public sealed class IndicatorStatusSection
 {
     private readonly double _fontSize;
     private readonly int _atrPeriod;
-    private readonly bool _atrScalingEnabled;
     private TextBlock? _atrValue;
     private TextBlock? _adxValue;
     private TextBlock? _diPlusValue;
@@ -15,11 +14,10 @@ public sealed class IndicatorStatusSection
     private readonly Dictionary<string, TextBlock> _rsiValues = new();
     private DateTime _nextRefreshAt = DateTime.MinValue;
 
-    public IndicatorStatusSection(double fontSize, int atrPeriod, bool atrScalingEnabled)
+    public IndicatorStatusSection(double fontSize, int atrPeriod)
     {
         _fontSize = fontSize;
         _atrPeriod = atrPeriod;
-        _atrScalingEnabled = atrScalingEnabled;
     }
 
     public ControlBase CreateControl(RobotContext context)
@@ -34,13 +32,9 @@ public sealed class IndicatorStatusSection
             HorizontalAlignment = HorizontalAlignment.Center
         });
 
-        var atrGrid = new Grid(2, 2) { Margin = new Thickness(0, 4, 0, 0) };
+        var atrGrid = new Grid(1, 2) { Margin = new Thickness(0, 4, 0, 0) };
         AddLabel(atrGrid, $"ATR ({_atrPeriod})", 0);
         _atrValue = AddValue(atrGrid, 0);
-        AddLabel(atrGrid, "ATR Scaling", 1);
-        var scalingValue = AddValue(atrGrid, 1);
-        scalingValue.Text = _atrScalingEnabled ? "$0.10 / pip" : "Off";
-        scalingValue.ForegroundColor = _atrScalingEnabled ? Color.FromHex("#FF65F2A5") : Color.FromHex("#FFBDEBFF");
         section.AddChild(atrGrid);
         var directionalMovementGrid = new Grid(2, 3) { Margin = new Thickness(0, 5, 0, 0) };
         AddDirectionalMovementColumn(directionalMovementGrid, "ADX (14)", 0, out _adxValue);
