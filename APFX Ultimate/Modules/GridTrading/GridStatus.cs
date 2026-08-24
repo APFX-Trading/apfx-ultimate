@@ -2,8 +2,8 @@ namespace cAlgo.Robots;
 public sealed class GridStatus
 {
     public string State { get; set; } = "Disabled";
+    public bool IsBasketActive { get; set; }
     public int EntriesPlaced { get; set; }
-    public int MaxEntries { get; init; }
     public double BasketProfit { get; set; }
     public double EffectiveTarget { get; set; }
     public double TrailingFloor { get; set; }

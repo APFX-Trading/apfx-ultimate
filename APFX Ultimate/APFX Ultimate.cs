@@ -18,8 +18,6 @@ public partial class APFXUltimate : Robot
     public bool GridEnabled { get; set; }
     [Parameter("Direction", DefaultValue = GridDirection.Both, Group = "Grid")]
     public GridDirection GridDirection { get; set; }
-    [Parameter("Additional Entries", DefaultValue = 3, MinValue = 0, MaxValue = 20, Group = "Grid")]
-    public int GridAdditionalEntries { get; set; }
     [Parameter("Target Profit", DefaultValue = 10.0, MinValue = 0.01, Group = "Grid")]
     public double GridTargetProfit { get; set; }
     [Parameter("Trailing Lock (%)", DefaultValue = 80.0, MinValue = 1, MaxValue = 100, Group = "Grid")]

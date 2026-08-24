@@ -31,10 +31,7 @@ public sealed class GridTradingModule : IRobotModule
         _status.MaxDrawdownPercent = _config.MaxDrawdownPercent;
         var snapshot = context.GetMarketSnapshot();
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
-        _status.StartingEquity = snapshot.Equity;
-        _status.CurrentEquity = _status.StartingEquity;
-        _status.EquityStop = _status.StartingEquity * (1 - _config.MaxDrawdownPercent / 100d);
-        _status.DrawdownRemaining = _status.StartingEquity - _status.EquityStop;
+        UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
         _status.State = "Waiting for manual position";
         context.Log($"Grid armed ({_config.Direction}); waiting for a manual position.");
@@ -42,13 +39,11 @@ public sealed class GridTradingModule : IRobotModule
 
     public void OnTick(RobotContext context)
     {
-        if (!_config.Enabled) return;
         var snapshot = context.GetMarketSnapshot();
         UpdateVolumeInfo(context);
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
-        _status.CurrentEquity = snapshot.Equity;
-        _status.DrawdownUsed = Math.Max(0, _status.StartingEquity - snapshot.Equity);
-        _status.DrawdownRemaining = Math.Max(0, snapshot.Equity - _status.EquityStop);
+        UpdateDrawdownStatus(snapshot);
+        if (!_config.Enabled) return;
         if (_closingBasket)
         {
             FinishClosingBasket(context, snapshot);
@@ -63,8 +58,7 @@ public sealed class GridTradingModule : IRobotModule
                 _startingEquity = snapshot.Equity;
                 _initialAtrPips = Math.Max(snapshot.AtrPips, 0.0001);
                 _anchorPrice = direction == TradeType.Buy ? snapshot.Ask : snapshot.Bid;
-                _status.EquityStop = _startingEquity * (1 - _config.MaxDrawdownPercent / 100d);
-                _status.StartingEquity = _startingEquity;
+                UpdateDrawdownStatus(snapshot);
                 SynchronizePendingOrders(context, snapshot.SymbolName);
                 context.Log($"Grid adopted manual {direction} position.");
                 break;
@@ -82,9 +76,10 @@ public sealed class GridTradingModule : IRobotModule
             return;
         }
 
-        if (snapshot.Equity <= _startingEquity * (1 - _config.MaxDrawdownPercent / 100d))
+        if (HasReachedMaxDrawdown())
         {
-            BeginBasketClose(context, positions, "equity drawdown limit"); return;
+            BeginBasketClose(context, GetChartSymbolPositions(context), "equity drawdown limit");
+            return;
         }
 
         var profit = _status.BasketProfit;
@@ -100,6 +95,28 @@ public sealed class GridTradingModule : IRobotModule
         PlaceNextLevels(context, snapshot);
     }
 
+    public void OnTimer(RobotContext context)
+    {
+        var snapshot = context.GetMarketSnapshot();
+        UpdateDrawdownStatus(snapshot);
+
+        if (!_config.Enabled || _activeDirection is null)
+        {
+            return;
+        }
+
+        if (_closingBasket)
+        {
+            FinishClosingBasket(context, snapshot);
+            return;
+        }
+
+        if (HasReachedMaxDrawdown())
+        {
+            BeginBasketClose(context, GetChartSymbolPositions(context), "equity drawdown limit");
+        }
+    }
+
     public void OnStop(RobotContext context) => ClearChartLines(context);
 
     private void PlaceNextLevels(RobotContext context, MarketSnapshot snapshot)
@@ -110,30 +127,28 @@ public sealed class GridTradingModule : IRobotModule
         var info = context.GetTradeVolumeInfo();
         var margin = _activeDirection!.Value == TradeType.Buy ? info.BuyEstimatedMargin : info.SellEstimatedMargin;
         var pips = _config.DistanceAmount / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue) * AtrScale(snapshot);
-        while (_nextLevel <= _config.AdditionalEntries)
+        // Keep a single next-level order. Once it fills, the next tick adds the following level.
+        // This removes an artificial position cap without flooding the account with pending orders.
+        if (existing.Length > 0)
         {
-            if (snapshot.FreeMargin < margin)
-            {
-                context.Log($"Grid stopped at level {_nextLevel}: insufficient free margin.");
-                return;
-            }
-
-            if (existing.Any(order => GetLevel(order.Label) == _nextLevel))
-            {
-                _nextLevel++;
-                continue;
-            }
-
-            var price = _activeDirection.Value == TradeType.Buy ? _anchorPrice - _nextLevel * pips * snapshot.PipSize : _anchorPrice + _nextLevel * pips * snapshot.PipSize;
-            var result = context.PlaceGridLimit(_activeDirection.Value, price, $"{prefix}.L{_nextLevel}");
-            if (!result.IsSuccessful)
-            {
-                context.Log($"Grid level {_nextLevel} failed: {result.Error}");
-                return;
-            }
-
-            _nextLevel++;
+            return;
         }
+
+        if (snapshot.FreeMargin < margin)
+        {
+            context.Log($"Grid stopped at level {_nextLevel}: insufficient free margin.");
+            return;
+        }
+
+        var price = _activeDirection.Value == TradeType.Buy ? _anchorPrice - _nextLevel * pips * snapshot.PipSize : _anchorPrice + _nextLevel * pips * snapshot.PipSize;
+        var result = context.PlaceGridLimit(_activeDirection.Value, price, $"{prefix}.L{_nextLevel}");
+        if (!result.IsSuccessful)
+        {
+            context.Log($"Grid level {_nextLevel} failed: {result.Error}");
+            return;
+        }
+
+        _nextLevel++;
     }
 
     private void SynchronizePendingOrders(RobotContext context, string symbolName)
@@ -142,12 +157,12 @@ public sealed class GridTradingModule : IRobotModule
             .OrderBy(order => GetLevel(order.Label))
             .ToArray();
 
-        foreach (var surplusOrder in pendingOrders.Skip(_config.AdditionalEntries))
+        foreach (var surplusOrder in pendingOrders.Skip(1))
         {
             context.CancelPendingOrder(surplusOrder);
         }
 
-        var highestLevel = pendingOrders.Take(_config.AdditionalEntries).Select(order => GetLevel(order.Label)).DefaultIfEmpty(0).Max();
+        var highestLevel = pendingOrders.Take(1).Select(order => GetLevel(order.Label)).DefaultIfEmpty(0).Max();
         _nextLevel = highestLevel + 1;
     }
 
@@ -195,6 +210,7 @@ public sealed class GridTradingModule : IRobotModule
     private void ResetBasket()
     {
         _activeDirection = null;
+        _status.IsBasketActive = false;
         _nextLevel = 1;
         _highWaterProfit = 0;
         _startingEquity = 0;
@@ -246,6 +262,25 @@ public sealed class GridTradingModule : IRobotModule
         return markerIndex >= 0 && int.TryParse(label[(markerIndex + 2)..], out var level) ? level : 0;
     }
     private void UpdateVolumeInfo(RobotContext context) { var volume=context.GetTradeVolumeInfo(); _status.VolumeInLots=volume.VolumeInLots; _status.BuyMargin=volume.BuyEstimatedMargin; _status.SellMargin=volume.SellEstimatedMargin; }
+    private void UpdateDrawdownStatus(MarketSnapshot snapshot)
+    {
+        // The baseline is locked when the first manual position is adopted. Until then,
+        // show the amount that would be available if a basket started at this moment.
+        var referenceEquity = _activeDirection is null ? snapshot.Equity : _startingEquity;
+        var allowedLoss = referenceEquity * _config.MaxDrawdownPercent / 100d;
+        _status.CurrentEquity = snapshot.Equity;
+        _status.StartingEquity = referenceEquity;
+        _status.EquityStop = referenceEquity - allowedLoss;
+        _status.DrawdownUsed = Math.Max(0, referenceEquity - snapshot.Equity);
+        _status.DrawdownRemaining = Math.Max(0, allowedLoss - _status.DrawdownUsed);
+        _status.IsBasketActive = _activeDirection is not null;
+    }
+    private bool HasReachedMaxDrawdown() =>
+        _config.MaxDrawdownPercent > 0 && _status.DrawdownUsed >= _startingEquity * _config.MaxDrawdownPercent / 100d;
+    private static IReadOnlyList<Position> GetChartSymbolPositions(RobotContext context) => context
+        .GetChartPositions(TradeType.Buy)
+        .Concat(context.GetChartPositions(TradeType.Sell))
+        .ToArray();
     private IEnumerable<TradeType> GetAllowedDirections() => _config.Direction switch { GridDirection.Buy => new[] { TradeType.Buy }, GridDirection.Sell => new[] { TradeType.Sell }, _ => new[] { TradeType.Buy, TradeType.Sell } };
     private string LabelPrefix(string symbol) => $"APFXUltimate.Grid.{symbol}.{_activeDirection}";
 }
