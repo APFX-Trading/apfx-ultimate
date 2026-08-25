@@ -9,13 +9,15 @@ public sealed class GraphControlsSection
     private readonly MarketHoursOverlayModule _marketHoursOverlay;
     private readonly EmaOverlayModule _emaOverlay;
     private readonly BollingerBandsOverlayModule _bollingerBandsOverlay;
+    private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
 
-    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay)
+    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
     {
         _fontSize = fontSize;
         _marketHoursOverlay = marketHoursOverlay ?? throw new ArgumentNullException(nameof(marketHoursOverlay));
         _emaOverlay = emaOverlay ?? throw new ArgumentNullException(nameof(emaOverlay));
         _bollingerBandsOverlay = bollingerBandsOverlay ?? throw new ArgumentNullException(nameof(bollingerBandsOverlay));
+        _volumeProfileOverlay = volumeProfileOverlay ?? throw new ArgumentNullException(nameof(volumeProfileOverlay));
     }
 
     public ControlBase CreateControl()
@@ -39,6 +41,7 @@ public sealed class GraphControlsSection
         }
         section.AddChild(CreateEmaToggle());
         section.AddChild(CreateBollingerBandsToggle());
+        section.AddChild(CreateVolumeProfileToggle());
         return section;
     }
 
@@ -136,6 +139,27 @@ public sealed class GraphControlsSection
         AddColorSwatch(row, Color.FromHex("#FF6FCBFF"));
         AddColorSwatch(row, Color.FromHex("#FFFFD06A"));
         AddColorSwatch(row, Color.FromHex("#FF6FCBFF"));
+        return row;
+    }
+
+    private ControlBase CreateVolumeProfileToggle()
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        var checkBox = new CheckBox
+        {
+            Text = _volumeProfileOverlay.Label,
+            IsChecked = _volumeProfileOverlay.IsEnabled,
+            ForegroundColor = Color.White,
+            FontSize = Math.Max(9, _fontSize - 1)
+        };
+        checkBox.Click += args => _volumeProfileOverlay.SetEnabled(args.CheckBox.IsChecked == true);
+        row.AddChild(checkBox);
+        AddColorSwatch(row, Color.FromHex("#FF2CB8F5"));
+        AddColorSwatch(row, Color.FromHex("#FFFFB74D"));
         return row;
     }
 }

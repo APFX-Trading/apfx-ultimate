@@ -11,6 +11,7 @@ public sealed class IndicatorStatusSection
     private TextBlock? _adxValue;
     private TextBlock? _diPlusValue;
     private TextBlock? _diMinusValue;
+    private TextBlock? _bollingerStatus;
     private readonly Dictionary<string, TextBlock> _rsiValues = new();
     private DateTime _nextRefreshAt = DateTime.MinValue;
 
@@ -57,6 +58,11 @@ public sealed class IndicatorStatusSection
         AddRsiColumn(rsiGrid, "H4", 4);
         section.AddChild(rsiGrid);
 
+        var bollingerGrid = new Grid(1, 2) { Margin = new Thickness(0, 5, 0, 0) };
+        AddLabel(bollingerGrid, "Bollinger", 0);
+        _bollingerStatus = AddValue(bollingerGrid, 0);
+        section.AddChild(bollingerGrid);
+
         Refresh(context);
         return section;
     }
@@ -78,6 +84,7 @@ public sealed class IndicatorStatusSection
         SetRsiValue("M15", snapshot.RsiM15);
         SetRsiValue("H1", snapshot.RsiH1);
         SetRsiValue("H4", snapshot.RsiH4);
+        SetBollingerStatus(snapshot);
         _nextRefreshAt = context.ServerTime.AddMilliseconds(250);
     }
 
@@ -143,6 +150,31 @@ public sealed class IndicatorStatusSection
             <= 30 => Color.FromHex("#FF65F2A5"),
             _ => Color.White
         };
+    }
+
+    private void SetBollingerStatus(MarketSnapshot snapshot)
+    {
+        if (_bollingerStatus is null || snapshot.BollingerTop <= snapshot.BollingerBottom)
+        {
+            return;
+        }
+
+        var percentB = 100 * (snapshot.Bid - snapshot.BollingerBottom) / (snapshot.BollingerTop - snapshot.BollingerBottom);
+        if (percentB >= 100)
+        {
+            _bollingerStatus.Text = $"Overbought ({percentB:N0}%)";
+            _bollingerStatus.ForegroundColor = Color.FromHex("#FFFF8B98");
+        }
+        else if (percentB <= 0)
+        {
+            _bollingerStatus.Text = $"Oversold ({percentB:N0}%)";
+            _bollingerStatus.ForegroundColor = Color.FromHex("#FF65F2A5");
+        }
+        else
+        {
+            _bollingerStatus.Text = $"Neutral ({percentB:N0}%)";
+            _bollingerStatus.ForegroundColor = Color.White;
+        }
     }
 
     public void RefreshIfDue(RobotContext context)

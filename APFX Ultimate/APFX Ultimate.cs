@@ -132,12 +132,19 @@ public partial class APFXUltimate : Robot
     [Parameter("Show Bollinger Bands", DefaultValue = false, Group = "Graph")]
     public bool ShowBollingerBands { get; set; }
 
+    [Parameter("Volume Profile Days", DefaultValue = 7, MinValue = 1, MaxValue = 30, Group = "Graph")]
+    public int VolumeProfileDays { get; set; }
+
+    [Parameter("Show Volume Profile", DefaultValue = false, Group = "Graph")]
+    public bool ShowVolumeProfile { get; set; }
+
     protected override void OnStart()
     {
         var gridAtr = Indicators.AverageTrueRange(GridAtrPeriod, MovingAverageType.Simple);
         var fastEma = Indicators.MovingAverage(Bars.ClosePrices, EmaFastPeriod, MovingAverageType.Exponential);
         var slowEma = Indicators.MovingAverage(Bars.ClosePrices, EmaSlowPeriod, MovingAverageType.Exponential);
         var bollingerBands = Indicators.BollingerBands(Bars.ClosePrices, BollingerPeriod, BollingerStandardDeviations, MovingAverageType.Simple);
+        var minuteBars = MarketData.GetBars(TimeFrame.Minute, SymbolName);
         var rsiM1 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute, SymbolName).ClosePrices, 14);
         var rsiM5 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute5, SymbolName).ClosePrices, 14);
         var rsiM15 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute15, SymbolName).ClosePrices, 14);
@@ -149,6 +156,7 @@ public partial class APFXUltimate : Robot
         var marketHoursOverlay = new MarketHoursOverlayModule(ShowAsiaSession, ShowEuropeSession, ShowUsSession, ShowPsychologicalLevels, SymbolName);
         var emaOverlay = new EmaOverlayModule(EmaFastPeriod, EmaSlowPeriod, ShowEma);
         var bollingerBandsOverlay = new BollingerBandsOverlayModule(BollingerPeriod, BollingerStandardDeviations, ShowBollingerBands);
+        var volumeProfileOverlay = new DailyVolumeProfileOverlayModule(VolumeProfileDays, ShowVolumeProfile);
         _userTimeOffsetChangedHandler = args => calendarNewsState.RefreshDisplayedTimes(args.UserTimeOffset);
         Application.UserTimeOffsetChanged += _userTimeOffsetChangedHandler;
         var context = new RobotContext(
@@ -200,6 +208,7 @@ public partial class APFXUltimate : Robot
                 }
                 return points;
             },
+            getDailyVolumeProfiles: (daysToShow, rowCount) => VolumeProfileCalculator.Calculate(minuteBars, Server.TimeInUtc, daysToShow, rowCount),
             drawChartTrendLine: (name, startTime, startPrice, endTime, endPrice, color, thickness) => Chart.DrawTrendLine(name, startTime, startPrice, endTime, endPrice, color, thickness, LineStyle.Solid),
             addChartControl: control => Chart.AddControl(control),
             removeChartControl: control => Chart.RemoveControl(control),
@@ -249,7 +258,7 @@ public partial class APFXUltimate : Robot
             placeGridLimit: (direction, price, label) => PlaceLimitOrder(direction, SymbolName, GetTradeVolumeInUnits(), price, label),
             closePosition: position => ClosePosition(position),
             cancelPendingOrder: order => CancelPendingOrder(order),
-            getMarketSnapshot: () => new MarketSnapshot(SymbolName, Symbol.Bid, Symbol.Ask, Symbol.PipSize, Symbol.PipValue, Account.Equity, Account.FreeMargin, gridAtr.Result.LastValue / Symbol.PipSize, directionalMovement.ADX.LastValue, directionalMovement.DIPlus.LastValue, directionalMovement.DIMinus.LastValue, rsiM1.Result.LastValue, rsiM5.Result.LastValue, rsiM15.Result.LastValue, rsiH1.Result.LastValue, rsiH4.Result.LastValue),
+            getMarketSnapshot: () => new MarketSnapshot(SymbolName, Symbol.Bid, Symbol.Ask, Symbol.PipSize, Symbol.PipValue, Account.Equity, Account.FreeMargin, gridAtr.Result.LastValue / Symbol.PipSize, directionalMovement.ADX.LastValue, directionalMovement.DIPlus.LastValue, directionalMovement.DIMinus.LastValue, rsiM1.Result.LastValue, rsiM5.Result.LastValue, rsiM15.Result.LastValue, rsiH1.Result.LastValue, rsiH4.Result.LastValue, bollingerBands.Top.LastValue, bollingerBands.Bottom.LastValue),
             drawHorizontalLine: (name, price, color) => Chart.DrawHorizontalLine(name, price, color, 2, LineStyle.Dots),
             drawGraphHorizontalLine: (name, price, color, thickness, lineStyle) => Chart.DrawHorizontalLine(name, price, color, thickness, lineStyle),
             drawGraphVerticalLine: (name, time, color, thickness, lineStyle) => Chart.DrawVerticalLine(name, time, color, thickness, lineStyle),
@@ -322,7 +331,8 @@ public partial class APFXUltimate : Robot
             marketHoursOverlay,
             emaOverlay,
             bollingerBandsOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay)
+            volumeProfileOverlay,
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, volumeProfileOverlay)
         });
 
         _modules.Start(context);
