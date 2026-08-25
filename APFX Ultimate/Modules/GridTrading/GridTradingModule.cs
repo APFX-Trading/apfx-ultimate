@@ -10,7 +10,6 @@ public sealed class GridTradingModule : IRobotModule
     private readonly GridStatus _status;
     private bool _closingBasket;
     private double _startingEquity;
-    private double _anchorPrice;
     private double _initialAtrPips;
     private double _highWaterProfit;
     private int _nextLevel = 1;
@@ -57,7 +56,6 @@ public sealed class GridTradingModule : IRobotModule
                 _activeDirection = direction;
                 _startingEquity = snapshot.Equity;
                 _initialAtrPips = Math.Max(snapshot.AtrPips, 0.0001);
-                _anchorPrice = direction == TradeType.Buy ? snapshot.Ask : snapshot.Bid;
                 UpdateDrawdownStatus(snapshot);
                 SynchronizePendingOrders(context, snapshot.SymbolName);
                 context.Log($"Grid adopted manual {direction} position.");
@@ -127,11 +125,29 @@ public sealed class GridTradingModule : IRobotModule
         var info = context.GetTradeVolumeInfo();
         var margin = _activeDirection!.Value == TradeType.Buy ? info.BuyEstimatedMargin : info.SellEstimatedMargin;
         var pips = _config.DistanceAmount / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue) * AtrScale(snapshot);
+        var positions = context.GetChartPositions(_activeDirection.Value);
         // Keep a single next-level order. Once it fills, the next tick adds the following level.
         // This removes an artificial position cap without flooding the account with pending orders.
         if (existing.Length > 0)
         {
             return;
+        }
+
+        var direction = _activeDirection.Value;
+        var spacing = pips * snapshot.PipSize;
+        var spacingSteps = 1;
+        var price = GetNextPendingPrice(direction, positions, spacing, spacingSteps);
+
+        // A limit order submitted at, or beyond, the live market can fill immediately.
+        // This happens after a quick move consumes one level before the following tick
+        // gets a chance to place the next order. Skip every already-passed level so a
+        // grid order is always a genuine pending limit order, never a second market entry.
+        while (!IsValidPendingLimitPrice(direction, price, snapshot))
+        {
+            context.Log($"Grid skipped passed level {_nextLevel}.");
+            _nextLevel++;
+            spacingSteps++;
+            price = GetNextPendingPrice(direction, positions, spacing, spacingSteps);
         }
 
         if (snapshot.FreeMargin < margin)
@@ -140,7 +156,6 @@ public sealed class GridTradingModule : IRobotModule
             return;
         }
 
-        var price = _activeDirection.Value == TradeType.Buy ? _anchorPrice - _nextLevel * pips * snapshot.PipSize : _anchorPrice + _nextLevel * pips * snapshot.PipSize;
         var result = context.PlaceGridLimit(_activeDirection.Value, price, $"{prefix}.L{_nextLevel}");
         if (!result.IsSuccessful)
         {
@@ -162,8 +177,13 @@ public sealed class GridTradingModule : IRobotModule
             context.CancelPendingOrder(surplusOrder);
         }
 
-        var highestLevel = pendingOrders.Take(1).Select(order => GetLevel(order.Label)).DefaultIfEmpty(0).Max();
-        _nextLevel = highestLevel + 1;
+        var highestPendingLevel = pendingOrders.Take(1).Select(order => GetLevel(order.Label)).DefaultIfEmpty(0).Max();
+        var highestFilledLevel = context.GetChartPositions(_activeDirection!.Value)
+            .Where(position => position.Label?.StartsWith(LabelPrefix(symbolName), StringComparison.Ordinal) == true)
+            .Select(position => GetLevel(position.Label!))
+            .DefaultIfEmpty(0)
+            .Max();
+        _nextLevel = Math.Max(highestPendingLevel, highestFilledLevel) + 1;
     }
 
     private void BeginBasketClose(RobotContext context, IReadOnlyList<Position> positions, string reason)
@@ -214,7 +234,6 @@ public sealed class GridTradingModule : IRobotModule
         _nextLevel = 1;
         _highWaterProfit = 0;
         _startingEquity = 0;
-        _anchorPrice = 0;
         _initialAtrPips = 0;
     }
     private void UpdateChartLines(RobotContext context, MarketSnapshot snapshot, IReadOnlyList<Position> positions)
@@ -229,7 +248,7 @@ public sealed class GridTradingModule : IRobotModule
         var direction = _activeDirection!.Value;
         var currentPrice = direction == TradeType.Buy ? snapshot.Bid : snapshot.Ask;
         var currentProfit = positions.Sum(position => position.NetProfit);
-        context.DrawHorizontalLine(TargetLineName, GetProfitPrice(currentPrice, _status.EffectiveTarget, direction, currentProfit, totalVolume, snapshot), Color.FromHex("#FF28B9F5"));
+        context.DrawHorizontalLine(TargetLineName, GetProfitPrice(currentPrice, _status.EffectiveTarget, direction, currentProfit, totalVolume, snapshot), Color.FromHex("#FFE879F9"));
 
         if (_status.TrailingFloor > 0)
         {
@@ -261,6 +280,18 @@ public sealed class GridTradingModule : IRobotModule
         var markerIndex = label.LastIndexOf(".L", StringComparison.Ordinal);
         return markerIndex >= 0 && int.TryParse(label[(markerIndex + 2)..], out var level) ? level : 0;
     }
+    private static double GetNextPendingPrice(TradeType direction, IReadOnlyList<Position> positions, double spacing, int spacingSteps)
+    {
+        var lastGridPrice = direction == TradeType.Buy
+            ? positions.Min(position => position.EntryPrice)
+            : positions.Max(position => position.EntryPrice);
+        return direction == TradeType.Buy
+            ? lastGridPrice - spacing * spacingSteps
+            : lastGridPrice + spacing * spacingSteps;
+    }
+    private static bool IsValidPendingLimitPrice(TradeType direction, double price, MarketSnapshot snapshot) => direction == TradeType.Buy
+        ? price < snapshot.Bid - snapshot.PipSize
+        : price > snapshot.Ask + snapshot.PipSize;
     private void UpdateVolumeInfo(RobotContext context) { var volume=context.GetTradeVolumeInfo(); _status.VolumeInLots=volume.VolumeInLots; _status.BuyMargin=volume.BuyEstimatedMargin; _status.SellMargin=volume.SellEstimatedMargin; }
     private void UpdateDrawdownStatus(MarketSnapshot snapshot)
     {
