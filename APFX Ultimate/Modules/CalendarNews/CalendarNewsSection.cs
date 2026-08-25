@@ -45,22 +45,26 @@ public sealed class CalendarNewsSection
         };
         section.AddChild(_statusText, 1, 0);
 
-        var newsGrid = new Grid(MaximumRows + 1, 4);
+        var newsGrid = new Grid(MaximumRows + 1, 6);
         foreach (var row in newsGrid.Rows)
         {
             row.SetHeightToAuto();
         }
         AddCell(newsGrid, "When", 0, 0, true);
         AddCell(newsGrid, "Event", 0, 1, true);
-        AddCell(newsGrid, "Results", 0, 2, true);
-        AddCell(newsGrid, "Impact", 0, 3, true);
+        AddCell(newsGrid, "A", 0, 2, true);
+        AddCell(newsGrid, "F", 0, 3, true);
+        AddCell(newsGrid, "P", 0, 4, true);
+        AddCell(newsGrid, "Impact", 0, 5, true);
         for (var row = 1; row <= MaximumRows; row++)
         {
             _newsRows.Add(new NewsRow(
                 AddCell(newsGrid, string.Empty, row, 0, false),
                 AddCell(newsGrid, string.Empty, row, 1, false),
                 AddCell(newsGrid, string.Empty, row, 2, false),
-                AddCell(newsGrid, string.Empty, row, 3, false)));
+                AddCell(newsGrid, string.Empty, row, 3, false),
+                AddCell(newsGrid, string.Empty, row, 4, false),
+                AddCell(newsGrid, string.Empty, row, 5, false)));
         }
 
         section.AddChild(new ScrollViewer
@@ -104,7 +108,9 @@ public sealed class CalendarNewsSection
             var row = _newsRows[rowIndex];
             row.Time.Text = chartTime.ToString("HH:mm");
             row.Event.Text = $"{item.Currency} {item.Name}";
-            row.Results.Text = FormatResults(item);
+            row.Actual.Text = DisplayValue(item.Actual);
+            row.Forecast.Text = DisplayValue(item.Forecast);
+            row.Previous.Text = DisplayValue(item.Previous);
             row.Impact.Text = GetImpactLabel(item.Importance);
             row.Impact.ForegroundColor = Color.FromHex(GetImpactColor(item.Importance));
             previousDate = itemDate;
@@ -148,21 +154,17 @@ public sealed class CalendarNewsSection
         _ => "#FFBDEBFF"
     };
 
-    private static string FormatResults(CalendarNewsItem item)
-    {
-        var actual = string.IsNullOrWhiteSpace(item.Actual) ? "-" : item.Actual;
-        var forecast = string.IsNullOrWhiteSpace(item.Forecast) ? "-" : item.Forecast;
-        var previous = string.IsNullOrWhiteSpace(item.Previous) ? "-" : item.Previous;
-        return $"A:{actual} F:{forecast} P:{previous}";
-    }
+    private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
-    private sealed record NewsRow(TextBlock Time, TextBlock Event, TextBlock Results, TextBlock Impact)
+    private sealed record NewsRow(TextBlock Time, TextBlock Event, TextBlock Actual, TextBlock Forecast, TextBlock Previous, TextBlock Impact)
     {
         public void SetDate(string date)
         {
             Time.Text = date;
             Event.Text = string.Empty;
-            Results.Text = string.Empty;
+            Actual.Text = string.Empty;
+            Forecast.Text = string.Empty;
+            Previous.Text = string.Empty;
             Impact.Text = string.Empty;
         }
 
@@ -170,7 +172,9 @@ public sealed class CalendarNewsSection
         {
             Time.Text = string.Empty;
             Event.Text = string.Empty;
-            Results.Text = string.Empty;
+            Actual.Text = string.Empty;
+            Forecast.Text = string.Empty;
+            Previous.Text = string.Empty;
             Impact.Text = string.Empty;
             Impact.ForegroundColor = Color.FromHex("#FFFFFFFF");
         }

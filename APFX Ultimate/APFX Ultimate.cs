@@ -42,6 +42,9 @@ public partial class APFXUltimate : Robot
     [Parameter("Refresh (Minutes)", DefaultValue = 5, MinValue = 1, MaxValue = 60, Group = "Calendar News")]
     public int CalendarRefreshMinutes { get; set; }
 
+    [Parameter("Minimum Impact", DefaultValue = CalendarMinimumImpact.Medium, Group = "Calendar News")]
+    public CalendarMinimumImpact CalendarMinimumImpact { get; set; }
+
     [Parameter("Enable", DefaultValue = false, Group = "Telegram Reporting")]
     public bool TelegramReportingEnabled { get; set; }
 
@@ -314,7 +317,7 @@ public partial class APFXUltimate : Robot
         {
             new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent), gridStatus),
             new TelegramReportingModule(new TelegramReportingConfiguration(TelegramReportingEnabled, TelegramBotToken, TelegramChatId, TelegramUtcOffsetMinutes, TelegramEnableDaily, TelegramDailyHour, TelegramDailyMinute, TelegramEnableWeekly, TelegramWeeklyDay, TelegramWeeklyHour, TelegramWeeklyMinute, TelegramEnableMonthly, TelegramMonthlyDay, TelegramMonthlyHour, TelegramMonthlyMinute, TelegramAlertClosedTrades, TelegramSymbolFilter, TelegramLabelFilter, TelegramReportTitle)),
-            new CalendarNewsModule(new CalendarNewsConfiguration(CalendarApiKey, CalendarHoursAhead, CalendarRefreshMinutes), calendarNewsState),
+            new CalendarNewsModule(new CalendarNewsConfiguration(CalendarApiKey, CalendarHoursAhead, CalendarRefreshMinutes, CalendarMinimumImpact), calendarNewsState),
             new CalendarNewsChartOverlayModule(calendarNewsState),
             marketHoursOverlay,
             emaOverlay,

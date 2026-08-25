@@ -64,7 +64,8 @@ public sealed class CalendarNewsModule : IRobotModule
             return;
         }
 
-        var request = new HttpRequest(new Uri($"{Endpoint}?hours={_configuration.HoursAhead}&limit={MaximumNewsItems}"))
+        var importanceLevels = string.Join(",", Enumerable.Range((int)_configuration.MinimumImpact, 4 - (int)_configuration.MinimumImpact));
+        var request = new HttpRequest(new Uri($"{Endpoint}?hours={_configuration.HoursAhead}&limit={MaximumNewsItems}&importanceLevelsCsv={importanceLevels}"))
         {
             Timeout = RequestTimeout,
             Version = new Version(1, 1)
