@@ -30,6 +30,7 @@ public sealed class RobotContext
     private readonly Func<TradeVolumeInfo> _getTradeVolumeInfo;
     private readonly Func<TradeType, IReadOnlyList<Position>> _getChartPositions;
     private readonly Func<string, IReadOnlyList<PendingOrder>> _getGridPendingOrders;
+    private readonly Func<TradeType, string, TradeResult> _placeGridMarketOrder;
     private readonly Func<TradeType, double, string, TradeResult> _placeGridLimit;
     private readonly Func<Position, TradeResult> _closePosition;
     private readonly Func<PendingOrder, TradeResult> _cancelPendingOrder;
@@ -70,6 +71,7 @@ public sealed class RobotContext
         Func<TradeVolumeInfo> getTradeVolumeInfo,
         Func<TradeType, IReadOnlyList<Position>> getChartPositions,
         Func<string, IReadOnlyList<PendingOrder>> getGridPendingOrders,
+        Func<TradeType, string, TradeResult> placeGridMarketOrder,
         Func<TradeType, double, string, TradeResult> placeGridLimit,
         Func<Position, TradeResult> closePosition,
         Func<PendingOrder, TradeResult> cancelPendingOrder,
@@ -109,6 +111,7 @@ public sealed class RobotContext
         _getTradeVolumeInfo = getTradeVolumeInfo ?? throw new ArgumentNullException(nameof(getTradeVolumeInfo));
         _getChartPositions = getChartPositions ?? throw new ArgumentNullException(nameof(getChartPositions));
         _getGridPendingOrders = getGridPendingOrders ?? throw new ArgumentNullException(nameof(getGridPendingOrders));
+        _placeGridMarketOrder = placeGridMarketOrder ?? throw new ArgumentNullException(nameof(placeGridMarketOrder));
         _placeGridLimit = placeGridLimit ?? throw new ArgumentNullException(nameof(placeGridLimit));
         _closePosition = closePosition ?? throw new ArgumentNullException(nameof(closePosition));
         _cancelPendingOrder = cancelPendingOrder ?? throw new ArgumentNullException(nameof(cancelPendingOrder));
@@ -158,6 +161,7 @@ public sealed class RobotContext
     public TradeVolumeInfo GetTradeVolumeInfo() => _getTradeVolumeInfo();
     public IReadOnlyList<Position> GetChartPositions(TradeType direction) => _getChartPositions(direction);
     public IReadOnlyList<PendingOrder> GetGridPendingOrders(string labelPrefix) => _getGridPendingOrders(labelPrefix);
+    public TradeResult PlaceGridMarketOrder(TradeType direction, string label) => _placeGridMarketOrder(direction, label);
     public TradeResult PlaceGridLimit(TradeType direction, double price, string label) => _placeGridLimit(direction, price, label);
     public TradeResult ClosePosition(Position position) => _closePosition(position);
     public TradeResult CancelPendingOrder(PendingOrder order) => _cancelPendingOrder(order);

@@ -255,6 +255,7 @@ public partial class APFXUltimate : Robot
             },
             getChartPositions: direction => Positions.Where(p => p.SymbolName == SymbolName && p.TradeType == direction).ToArray(),
             getGridPendingOrders: labelPrefix => PendingOrders.Where(o => o.SymbolName == SymbolName && o.Label?.StartsWith(labelPrefix, StringComparison.Ordinal) == true).ToArray(),
+            placeGridMarketOrder: (direction, label) => ExecuteMarketOrder(direction, SymbolName, GetTradeVolumeInUnits(), label),
             placeGridLimit: (direction, price, label) => PlaceLimitOrder(direction, SymbolName, GetTradeVolumeInUnits(), price, label),
             closePosition: position => ClosePosition(position),
             cancelPendingOrder: order => CancelPendingOrder(order),

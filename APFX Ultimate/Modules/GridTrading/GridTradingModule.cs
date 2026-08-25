@@ -135,24 +135,28 @@ public sealed class GridTradingModule : IRobotModule
 
         var direction = _activeDirection.Value;
         var spacing = pips * snapshot.PipSize;
-        var spacingSteps = 1;
-        var price = GetNextPendingPrice(direction, positions, spacing, spacingSteps);
-
-        // A limit order submitted at, or beyond, the live market can fill immediately.
-        // This happens after a quick move consumes one level before the following tick
-        // gets a chance to place the next order. Skip every already-passed level so a
-        // grid order is always a genuine pending limit order, never a second market entry.
-        while (!IsValidPendingLimitPrice(direction, price, snapshot))
-        {
-            context.Log($"Grid skipped passed level {_nextLevel}.");
-            _nextLevel++;
-            spacingSteps++;
-            price = GetNextPendingPrice(direction, positions, spacing, spacingSteps);
-        }
+        var price = GetNextPendingPrice(direction, positions, spacing);
 
         if (snapshot.FreeMargin < margin)
         {
             context.Log($"Grid stopped at level {_nextLevel}: insufficient free margin.");
+            return;
+        }
+
+        // If a fast adverse move has already crossed the next grid level, the limit
+        // price is invalid. Enter just this missed level at market and wait for the
+        // next tick before creating another order; this prevents catch-up bursts.
+        if (!IsValidPendingLimitPrice(direction, price, snapshot))
+        {
+            var marketResult = context.PlaceGridMarketOrder(direction, $"{prefix}.L{_nextLevel}");
+            if (!marketResult.IsSuccessful)
+            {
+                context.Log($"Grid market level {_nextLevel} failed: {marketResult.Error}");
+                return;
+            }
+
+            context.Log($"Grid level {_nextLevel} entered at market after a fast move.");
+            _nextLevel++;
             return;
         }
 
@@ -280,14 +284,14 @@ public sealed class GridTradingModule : IRobotModule
         var markerIndex = label.LastIndexOf(".L", StringComparison.Ordinal);
         return markerIndex >= 0 && int.TryParse(label[(markerIndex + 2)..], out var level) ? level : 0;
     }
-    private static double GetNextPendingPrice(TradeType direction, IReadOnlyList<Position> positions, double spacing, int spacingSteps)
+    private static double GetNextPendingPrice(TradeType direction, IReadOnlyList<Position> positions, double spacing)
     {
         var lastGridPrice = direction == TradeType.Buy
             ? positions.Min(position => position.EntryPrice)
             : positions.Max(position => position.EntryPrice);
         return direction == TradeType.Buy
-            ? lastGridPrice - spacing * spacingSteps
-            : lastGridPrice + spacing * spacingSteps;
+            ? lastGridPrice - spacing
+            : lastGridPrice + spacing;
     }
     private static bool IsValidPendingLimitPrice(TradeType direction, double price, MarketSnapshot snapshot) => direction == TradeType.Buy
         ? price < snapshot.Bid - snapshot.PipSize
