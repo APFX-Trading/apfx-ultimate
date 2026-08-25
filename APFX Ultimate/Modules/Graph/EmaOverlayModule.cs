@@ -13,7 +13,7 @@ public sealed class EmaOverlayModule : IRobotModule
 {
     private const string ObjectPrefix = "APFXUltimate.Graph.Ema.";
     private static readonly Color FastColor = Color.FromHex("#FF65F2A5");
-    private static readonly Color SlowColor = Color.FromHex("#FF8B7CFF");
+    private static readonly Color SlowColor = Color.FromHex("#FFFD77D4");
     private readonly HashSet<string> _objectNames = new(StringComparer.Ordinal);
     private readonly int _fastPeriod;
     private readonly int _slowPeriod;

@@ -132,6 +132,12 @@ public partial class APFXUltimate : Robot
     [Parameter("Show Bollinger Bands", DefaultValue = false, Group = "Graph")]
     public bool ShowBollingerBands { get; set; }
 
+    [Parameter("Show Daily VWAP", DefaultValue = false, Group = "Graph")]
+    public bool ShowDailyVwap { get; set; }
+
+    [Parameter("Show Previous Levels", DefaultValue = false, Group = "Graph")]
+    public bool ShowPreviousPeriodLevels { get; set; }
+
     [Parameter("Volume Profile Days", DefaultValue = 7, MinValue = 1, MaxValue = 30, Group = "Graph")]
     public int VolumeProfileDays { get; set; }
 
@@ -145,6 +151,8 @@ public partial class APFXUltimate : Robot
         var slowEma = Indicators.MovingAverage(Bars.ClosePrices, EmaSlowPeriod, MovingAverageType.Exponential);
         var bollingerBands = Indicators.BollingerBands(Bars.ClosePrices, BollingerPeriod, BollingerStandardDeviations, MovingAverageType.Simple);
         var minuteBars = MarketData.GetBars(TimeFrame.Minute, SymbolName);
+        var dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
+        var weeklyBars = MarketData.GetBars(TimeFrame.Weekly, SymbolName);
         var rsiM1 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute, SymbolName).ClosePrices, 14);
         var rsiM5 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute5, SymbolName).ClosePrices, 14);
         var rsiM15 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute15, SymbolName).ClosePrices, 14);
@@ -156,6 +164,8 @@ public partial class APFXUltimate : Robot
         var marketHoursOverlay = new MarketHoursOverlayModule(ShowAsiaSession, ShowEuropeSession, ShowUsSession, ShowPsychologicalLevels, SymbolName);
         var emaOverlay = new EmaOverlayModule(EmaFastPeriod, EmaSlowPeriod, ShowEma);
         var bollingerBandsOverlay = new BollingerBandsOverlayModule(BollingerPeriod, BollingerStandardDeviations, ShowBollingerBands);
+        var dailyVwapOverlay = new DailyVwapOverlayModule(ShowDailyVwap);
+        var previousPeriodLevelsOverlay = new PreviousPeriodLevelsOverlayModule(ShowPreviousPeriodLevels);
         var volumeProfileOverlay = new DailyVolumeProfileOverlayModule(VolumeProfileDays, ShowVolumeProfile);
         _userTimeOffsetChangedHandler = args => calendarNewsState.RefreshDisplayedTimes(args.UserTimeOffset);
         Application.UserTimeOffsetChanged += _userTimeOffsetChangedHandler;
@@ -208,6 +218,8 @@ public partial class APFXUltimate : Robot
                 }
                 return points;
             },
+            getDailyVwapData: () => DailyVwapCalculator.Calculate(minuteBars, Server.TimeInUtc),
+            getPreviousPeriodLevels: () => PreviousPeriodLevelsCalculator.Calculate(dailyBars, weeklyBars, Server.TimeInUtc),
             getDailyVolumeProfiles: (daysToShow, rowCount) => VolumeProfileCalculator.Calculate(minuteBars, Server.TimeInUtc, daysToShow, rowCount),
             drawChartTrendLine: (name, startTime, startPrice, endTime, endPrice, color, thickness) => Chart.DrawTrendLine(name, startTime, startPrice, endTime, endPrice, color, thickness, LineStyle.Solid),
             addChartControl: control => Chart.AddControl(control),
@@ -332,8 +344,10 @@ public partial class APFXUltimate : Robot
             marketHoursOverlay,
             emaOverlay,
             bollingerBandsOverlay,
+            dailyVwapOverlay,
+            previousPeriodLevelsOverlay,
             volumeProfileOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, volumeProfileOverlay)
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, volumeProfileOverlay)
         });
 
         _modules.Start(context);

@@ -12,6 +12,8 @@ public sealed class RobotContext
     private readonly Func<DateTime, DateTime> _convertUtcToChartTime;
     private readonly Func<EmaLine, IReadOnlyList<ChartTimePricePoint>> _getEmaPoints;
     private readonly Func<BollingerBandLine, IReadOnlyList<ChartTimePricePoint>> _getBollingerBandPoints;
+    private readonly Func<DailyVwapData> _getDailyVwapData;
+    private readonly Func<PreviousPeriodLevels?> _getPreviousPeriodLevels;
     private readonly Func<int, int, IReadOnlyList<DailyVolumeProfile>> _getDailyVolumeProfiles;
     private readonly Action<string, DateTime, double, DateTime, double, Color, int> _drawChartTrendLine;
     private readonly Action<ControlBase> _addChartControl;
@@ -53,6 +55,8 @@ public sealed class RobotContext
         Func<DateTime, DateTime> convertUtcToChartTime,
         Func<EmaLine, IReadOnlyList<ChartTimePricePoint>> getEmaPoints,
         Func<BollingerBandLine, IReadOnlyList<ChartTimePricePoint>> getBollingerBandPoints,
+        Func<DailyVwapData> getDailyVwapData,
+        Func<PreviousPeriodLevels?> getPreviousPeriodLevels,
         Func<int, int, IReadOnlyList<DailyVolumeProfile>> getDailyVolumeProfiles,
         Action<string, DateTime, double, DateTime, double, Color, int> drawChartTrendLine,
         Action<ControlBase> addChartControl,
@@ -93,6 +97,8 @@ public sealed class RobotContext
         _convertUtcToChartTime = convertUtcToChartTime ?? throw new ArgumentNullException(nameof(convertUtcToChartTime));
         _getEmaPoints = getEmaPoints ?? throw new ArgumentNullException(nameof(getEmaPoints));
         _getBollingerBandPoints = getBollingerBandPoints ?? throw new ArgumentNullException(nameof(getBollingerBandPoints));
+        _getDailyVwapData = getDailyVwapData ?? throw new ArgumentNullException(nameof(getDailyVwapData));
+        _getPreviousPeriodLevels = getPreviousPeriodLevels ?? throw new ArgumentNullException(nameof(getPreviousPeriodLevels));
         _getDailyVolumeProfiles = getDailyVolumeProfiles ?? throw new ArgumentNullException(nameof(getDailyVolumeProfiles));
         _drawChartTrendLine = drawChartTrendLine ?? throw new ArgumentNullException(nameof(drawChartTrendLine));
         _addChartControl = addChartControl ?? throw new ArgumentNullException(nameof(addChartControl));
@@ -133,6 +139,8 @@ public sealed class RobotContext
     public DateTime ConvertUtcToChartTime(DateTime utcTime) => _convertUtcToChartTime(utcTime);
     public IReadOnlyList<ChartTimePricePoint> GetEmaPoints(EmaLine line) => _getEmaPoints(line);
     public IReadOnlyList<ChartTimePricePoint> GetBollingerBandPoints(BollingerBandLine line) => _getBollingerBandPoints(line);
+    public DailyVwapData GetDailyVwapData() => _getDailyVwapData();
+    public PreviousPeriodLevels? GetPreviousPeriodLevels() => _getPreviousPeriodLevels();
     public IReadOnlyList<DailyVolumeProfile> GetDailyVolumeProfiles(int daysToShow, int rowCount) => _getDailyVolumeProfiles(daysToShow, rowCount);
     public void DrawChartTrendLine(string name, DateTime startTime, double startPrice, DateTime endTime, double endPrice, Color color, int thickness) => _drawChartTrendLine(name, startTime, startPrice, endTime, endPrice, color, thickness);
 

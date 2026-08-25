@@ -9,14 +9,18 @@ public sealed class GraphControlsSection
     private readonly MarketHoursOverlayModule _marketHoursOverlay;
     private readonly EmaOverlayModule _emaOverlay;
     private readonly BollingerBandsOverlayModule _bollingerBandsOverlay;
+    private readonly DailyVwapOverlayModule _dailyVwapOverlay;
+    private readonly PreviousPeriodLevelsOverlayModule _previousPeriodLevelsOverlay;
     private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
 
-    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
+    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
     {
         _fontSize = fontSize;
         _marketHoursOverlay = marketHoursOverlay ?? throw new ArgumentNullException(nameof(marketHoursOverlay));
         _emaOverlay = emaOverlay ?? throw new ArgumentNullException(nameof(emaOverlay));
         _bollingerBandsOverlay = bollingerBandsOverlay ?? throw new ArgumentNullException(nameof(bollingerBandsOverlay));
+        _dailyVwapOverlay = dailyVwapOverlay ?? throw new ArgumentNullException(nameof(dailyVwapOverlay));
+        _previousPeriodLevelsOverlay = previousPeriodLevelsOverlay ?? throw new ArgumentNullException(nameof(previousPeriodLevelsOverlay));
         _volumeProfileOverlay = volumeProfileOverlay ?? throw new ArgumentNullException(nameof(volumeProfileOverlay));
     }
 
@@ -41,6 +45,8 @@ public sealed class GraphControlsSection
         }
         section.AddChild(CreateEmaToggle());
         section.AddChild(CreateBollingerBandsToggle());
+        section.AddChild(CreateOverlayToggle(_dailyVwapOverlay.Label, _dailyVwapOverlay.IsEnabled, _dailyVwapOverlay.SetEnabled, "#FFFF5C8A", "#FF55D6BE", "#FF7C8CFF"));
+        section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, "#FF4FC3F7", "#FFFF7F96", "#FFE9EEF5", "#FFB57BFF", "#FFFFA657", "#FFFFDF78"));
         section.AddChild(CreateVolumeProfileToggle());
         return section;
     }
@@ -116,7 +122,7 @@ public sealed class GraphControlsSection
         checkBox.Click += args => _emaOverlay.SetEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
         AddColorSwatch(row, Color.FromHex("#FF65F2A5"));
-        AddColorSwatch(row, Color.FromHex("#FF8B7CFF"));
+        AddColorSwatch(row, Color.FromHex("#FFFD77D4"));
         return row;
     }
 
@@ -136,9 +142,8 @@ public sealed class GraphControlsSection
         };
         checkBox.Click += args => _bollingerBandsOverlay.SetEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
-        AddColorSwatch(row, Color.FromHex("#FF6FCBFF"));
-        AddColorSwatch(row, Color.FromHex("#FFFFD06A"));
-        AddColorSwatch(row, Color.FromHex("#FF6FCBFF"));
+        AddColorSwatch(row, Color.FromHex("#FF4FC3F7"));
+        AddColorSwatch(row, Color.FromHex("#FFF3F6FA"));
         return row;
     }
 
@@ -160,6 +165,22 @@ public sealed class GraphControlsSection
         row.AddChild(checkBox);
         AddColorSwatch(row, Color.FromHex("#FF2CB8F5"));
         AddColorSwatch(row, Color.FromHex("#FFFFB74D"));
+        return row;
+    }
+
+    private ControlBase CreateOverlayToggle(string text, bool isEnabled, Action<bool> setEnabled, params string[] colors)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        var checkBox = new CheckBox
+        {
+            Text = text,
+            IsChecked = isEnabled,
+            ForegroundColor = Color.White,
+            FontSize = Math.Max(9, _fontSize - 1)
+        };
+        checkBox.Click += args => setEnabled(args.CheckBox.IsChecked == true);
+        row.AddChild(checkBox);
+        foreach (var color in colors) AddColorSwatch(row, Color.FromHex(color));
         return row;
     }
 }

@@ -58,9 +58,9 @@ public sealed class BollingerBandsOverlayModule : IRobotModule
         if (_context is null || !IsEnabled) return;
 
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        DrawLine(BollingerBandLine.Top, Color.FromHex("#FF6FCBFF"), activeNames);
-        DrawLine(BollingerBandLine.Main, Color.FromHex("#FFFFD06A"), activeNames);
-        DrawLine(BollingerBandLine.Bottom, Color.FromHex("#FF6FCBFF"), activeNames);
+        DrawLine(BollingerBandLine.Top, Color.FromHex("#FF4FC3F7"), activeNames);
+        DrawLine(BollingerBandLine.Main, Color.FromHex("#FFF3F6FA"), activeNames);
+        DrawLine(BollingerBandLine.Bottom, Color.FromHex("#FF4FC3F7"), activeNames);
         foreach (var staleName in _objectNames.Except(activeNames).ToArray()) _context.RemoveChartObject(staleName);
         _objectNames.Clear();
         _objectNames.UnionWith(activeNames);
