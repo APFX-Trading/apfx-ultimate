@@ -79,7 +79,7 @@ public sealed class CalendarNewsChartOverlayModule : IRobotModule
                 var results = FormatResults(item);
                 var label = $"{displayedTime:ddd HH:mm}  {item.Currency} {item.Name}{results}";
                 var labelPrice = viewport.TopPrice - labelRange * (0.04 + labelRow * rowSpacing);
-                _context.DrawChartText(labelName, label, group.Key, labelPrice, GetImpactColor(item.Importance));
+                _context.DrawChartTextFromLeft(labelName, label, group.Key, labelPrice, GetImpactColor(item.Importance));
                 activeNames.Add(labelName);
                 labelRow++;
             }

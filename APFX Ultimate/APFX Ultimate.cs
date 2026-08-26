@@ -304,6 +304,14 @@ public partial class APFXUltimate : Robot
                 chartText.HorizontalAlignment = HorizontalAlignment.Center;
                 chartText.VerticalAlignment = VerticalAlignment.Top;
             },
+            drawChartTextFromLeft: (name, text, time, price, color) =>
+            {
+                var chartText = Chart.DrawText(name, text, time, price, color);
+                chartText.FontSize = 10;
+                chartText.IsBold = true;
+                chartText.HorizontalAlignment = HorizontalAlignment.Left;
+                chartText.VerticalAlignment = VerticalAlignment.Top;
+            },
             getChartViewport: () =>
             {
                 var lastIndex = Math.Max(0, Bars.Count - 1);

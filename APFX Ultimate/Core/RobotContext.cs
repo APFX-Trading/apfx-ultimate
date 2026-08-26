@@ -41,6 +41,7 @@ public sealed class RobotContext
     private readonly Action<string, double, Color, int, LineStyle> _drawGraphHorizontalLine;
     private readonly Action<string, DateTime, Color, int, LineStyle> _drawGraphVerticalLine;
     private readonly Action<string, string, DateTime, double, Color> _drawChartText;
+    private readonly Action<string, string, DateTime, double, Color> _drawChartTextFromLeft;
     private readonly Func<ChartViewport> _getChartViewport;
     private readonly Func<DateTime, DateTime, ChartPriceRange?> _getChartPriceRange;
     private readonly Action<string, DateTime, DateTime, double, double, Color> _drawChartRectangle;
@@ -84,6 +85,7 @@ public sealed class RobotContext
         Action<string, double, Color, int, LineStyle> drawGraphHorizontalLine,
         Action<string, DateTime, Color, int, LineStyle> drawGraphVerticalLine,
         Action<string, string, DateTime, double, Color> drawChartText,
+        Action<string, string, DateTime, double, Color> drawChartTextFromLeft,
         Func<ChartViewport> getChartViewport,
         Func<DateTime, DateTime, ChartPriceRange?> getChartPriceRange,
         Action<string, DateTime, DateTime, double, double, Color> drawChartRectangle,
@@ -126,6 +128,7 @@ public sealed class RobotContext
         _drawGraphHorizontalLine = drawGraphHorizontalLine ?? throw new ArgumentNullException(nameof(drawGraphHorizontalLine));
         _drawGraphVerticalLine = drawGraphVerticalLine ?? throw new ArgumentNullException(nameof(drawGraphVerticalLine));
         _drawChartText = drawChartText ?? throw new ArgumentNullException(nameof(drawChartText));
+        _drawChartTextFromLeft = drawChartTextFromLeft ?? throw new ArgumentNullException(nameof(drawChartTextFromLeft));
         _getChartViewport = getChartViewport ?? throw new ArgumentNullException(nameof(getChartViewport));
         _getChartPriceRange = getChartPriceRange ?? throw new ArgumentNullException(nameof(getChartPriceRange));
         _drawChartRectangle = drawChartRectangle ?? throw new ArgumentNullException(nameof(drawChartRectangle));
@@ -178,6 +181,7 @@ public sealed class RobotContext
     public void DrawGraphHorizontalLine(string name, double price, Color color, int thickness, LineStyle lineStyle) => _drawGraphHorizontalLine(name, price, color, thickness, lineStyle);
     public void DrawGraphVerticalLine(string name, DateTime time, Color color, int thickness, LineStyle lineStyle) => _drawGraphVerticalLine(name, time, color, thickness, lineStyle);
     public void DrawChartText(string name, string text, DateTime time, double price, Color color) => _drawChartText(name, text, time, price, color);
+    public void DrawChartTextFromLeft(string name, string text, DateTime time, double price, Color color) => _drawChartTextFromLeft(name, text, time, price, color);
     public ChartViewport GetChartViewport() => _getChartViewport();
     public ChartPriceRange? GetChartPriceRange(DateTime start, DateTime end) => _getChartPriceRange(start, end);
     public void DrawChartRectangle(string name, DateTime start, DateTime end, double bottomPrice, double topPrice, Color color) => _drawChartRectangle(name, start, end, bottomPrice, topPrice, color);
