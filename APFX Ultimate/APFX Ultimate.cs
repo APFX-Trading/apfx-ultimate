@@ -138,6 +138,24 @@ public partial class APFXUltimate : Robot
     [Parameter("Show Previous Levels", DefaultValue = false, Group = "Graph")]
     public bool ShowPreviousPeriodLevels { get; set; }
 
+    [Parameter("Show Strong S/R Levels", DefaultValue = false, Group = "Graph")]
+    public bool ShowMarketPulseLevels { get; set; }
+
+    [Parameter("Swing Left", DefaultValue = 3, MinValue = 1, MaxValue = 20, Group = "Market Pulse Levels")]
+    public int MarketPulseSwingLeft { get; set; }
+
+    [Parameter("Swing Right", DefaultValue = 3, MinValue = 1, MaxValue = 20, Group = "Market Pulse Levels")]
+    public int MarketPulseSwingRight { get; set; }
+
+    [Parameter("Minimum Tests", DefaultValue = 2, MinValue = 2, MaxValue = 10, Group = "Market Pulse Levels")]
+    public int MarketPulseMinimumTests { get; set; }
+
+    [Parameter("Max Levels Per Side", DefaultValue = 3, MinValue = 1, MaxValue = 10, Group = "Market Pulse Levels")]
+    public int MarketPulseMaximumLevelsPerSide { get; set; }
+
+    [Parameter("Merge Distance (ATR)", DefaultValue = 0.60, MinValue = 0.05, MaxValue = 3, Step = 0.05, Group = "Market Pulse Levels")]
+    public double MarketPulseMergeAtr { get; set; }
+
     [Parameter("Volume Profile Days", DefaultValue = 7, MinValue = 1, MaxValue = 30, Group = "Graph")]
     public int VolumeProfileDays { get; set; }
 
@@ -147,6 +165,7 @@ public partial class APFXUltimate : Robot
     protected override void OnStart()
     {
         var gridAtr = Indicators.AverageTrueRange(GridAtrPeriod, MovingAverageType.Simple);
+        var marketPulseAtr = Indicators.AverageTrueRange(GridAtrPeriod, MovingAverageType.Exponential);
         var fastEma = Indicators.MovingAverage(Bars.ClosePrices, EmaFastPeriod, MovingAverageType.Exponential);
         var slowEma = Indicators.MovingAverage(Bars.ClosePrices, EmaSlowPeriod, MovingAverageType.Exponential);
         var bollingerBands = Indicators.BollingerBands(Bars.ClosePrices, BollingerPeriod, BollingerStandardDeviations, MovingAverageType.Simple);
@@ -166,6 +185,7 @@ public partial class APFXUltimate : Robot
         var bollingerBandsOverlay = new BollingerBandsOverlayModule(BollingerPeriod, BollingerStandardDeviations, ShowBollingerBands);
         var dailyVwapOverlay = new DailyVwapOverlayModule(ShowDailyVwap);
         var previousPeriodLevelsOverlay = new PreviousPeriodLevelsOverlayModule(ShowPreviousPeriodLevels);
+        var marketPulseLevelsOverlay = new MarketPulseLevelsOverlayModule(Bars, marketPulseAtr, Symbol, MarketPulseSwingLeft, MarketPulseSwingRight, MarketPulseMinimumTests, MarketPulseMaximumLevelsPerSide, MarketPulseMergeAtr, ShowMarketPulseLevels);
         var volumeProfileOverlay = new DailyVolumeProfileOverlayModule(VolumeProfileDays, ShowVolumeProfile);
         _userTimeOffsetChangedHandler = args => calendarNewsState.RefreshDisplayedTimes(args.UserTimeOffset);
         Application.UserTimeOffsetChanged += _userTimeOffsetChangedHandler;
@@ -219,7 +239,7 @@ public partial class APFXUltimate : Robot
                 return points;
             },
             getDailyVwapData: () => DailyVwapCalculator.Calculate(minuteBars, Server.TimeInUtc),
-            getPreviousPeriodLevels: () => PreviousPeriodLevelsCalculator.Calculate(dailyBars, weeklyBars, Server.TimeInUtc),
+            getPreviousPeriodLevels: () => PreviousPeriodLevelsCalculator.Calculate(dailyBars, weeklyBars),
             getDailyVolumeProfiles: (daysToShow, rowCount) => VolumeProfileCalculator.Calculate(minuteBars, Server.TimeInUtc, daysToShow, rowCount),
             drawChartTrendLine: (name, startTime, startPrice, endTime, endPrice, color, thickness) => Chart.DrawTrendLine(name, startTime, startPrice, endTime, endPrice, color, thickness, LineStyle.Solid),
             addChartControl: control => Chart.AddControl(control),
@@ -346,8 +366,9 @@ public partial class APFXUltimate : Robot
             bollingerBandsOverlay,
             dailyVwapOverlay,
             previousPeriodLevelsOverlay,
+            marketPulseLevelsOverlay,
             volumeProfileOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, volumeProfileOverlay)
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay)
         });
 
         _modules.Start(context);

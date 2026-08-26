@@ -11,9 +11,10 @@ public sealed class GraphControlsSection
     private readonly BollingerBandsOverlayModule _bollingerBandsOverlay;
     private readonly DailyVwapOverlayModule _dailyVwapOverlay;
     private readonly PreviousPeriodLevelsOverlayModule _previousPeriodLevelsOverlay;
+    private readonly MarketPulseLevelsOverlayModule _marketPulseLevelsOverlay;
     private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
 
-    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
+    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
     {
         _fontSize = fontSize;
         _marketHoursOverlay = marketHoursOverlay ?? throw new ArgumentNullException(nameof(marketHoursOverlay));
@@ -21,6 +22,7 @@ public sealed class GraphControlsSection
         _bollingerBandsOverlay = bollingerBandsOverlay ?? throw new ArgumentNullException(nameof(bollingerBandsOverlay));
         _dailyVwapOverlay = dailyVwapOverlay ?? throw new ArgumentNullException(nameof(dailyVwapOverlay));
         _previousPeriodLevelsOverlay = previousPeriodLevelsOverlay ?? throw new ArgumentNullException(nameof(previousPeriodLevelsOverlay));
+        _marketPulseLevelsOverlay = marketPulseLevelsOverlay ?? throw new ArgumentNullException(nameof(marketPulseLevelsOverlay));
         _volumeProfileOverlay = volumeProfileOverlay ?? throw new ArgumentNullException(nameof(volumeProfileOverlay));
     }
 
@@ -47,6 +49,7 @@ public sealed class GraphControlsSection
         section.AddChild(CreateBollingerBandsToggle());
         section.AddChild(CreateOverlayToggle(_dailyVwapOverlay.Label, _dailyVwapOverlay.IsEnabled, _dailyVwapOverlay.SetEnabled, "#FFFF5C8A", "#FF55D6BE", "#FF7C8CFF"));
         section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, "#FF4FC3F7", "#FFFF7F96", "#FFE9EEF5", "#FFB57BFF", "#FFFFA657", "#FFFFDF78"));
+        section.AddChild(CreateOverlayToggle(_marketPulseLevelsOverlay.Label, _marketPulseLevelsOverlay.IsEnabled, _marketPulseLevelsOverlay.SetEnabled, "#FF55D6BE", "#FFFF7F96"));
         section.AddChild(CreateVolumeProfileToggle());
         return section;
     }

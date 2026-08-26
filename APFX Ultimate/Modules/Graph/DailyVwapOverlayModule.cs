@@ -51,7 +51,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
 
         var data = _context.GetDailyVwapData();
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        DrawLine("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, activeNames);
+        DrawLine("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, "Daily VWAP", activeNames);
         DrawLine("UpperOne", data.UpperOne, Color.FromHex("#FF55D6BE"), 1, activeNames);
         DrawLine("LowerOne", data.LowerOne, Color.FromHex("#FF55D6BE"), 1, activeNames);
         DrawLine("UpperTwo", data.UpperTwo, Color.FromHex("#FF7C8CFF"), 1, activeNames);
@@ -60,7 +60,9 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         _nextRefreshAt = _context.ServerTime.Add(RefreshInterval);
     }
 
-    private void DrawLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, HashSet<string> activeNames)
+    private void DrawLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, HashSet<string> activeNames) => DrawLine(key, points, color, thickness, null, activeNames);
+
+    private void DrawLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label, HashSet<string> activeNames)
     {
         var sampledPoints = Downsample(points);
         for (var index = 1; index < sampledPoints.Count; index++)
@@ -70,6 +72,13 @@ public sealed class DailyVwapOverlayModule : IRobotModule
             var name = $"{ObjectPrefix}{key}.{start.Time:yyyyMMddHHmmss}";
             _context!.DrawChartTrendLine(name, start.Time, start.Price, end.Time, end.Price, color, thickness);
             activeNames.Add(name);
+        }
+
+        if (label is not null && sampledPoints.Count > 0)
+        {
+            var labelName = ObjectPrefix + key + ".Label";
+            _context!.DrawChartText(labelName, label, _context.GetChartViewport().EndTime, sampledPoints[^1].Price, color);
+            activeNames.Add(labelName);
         }
     }
 

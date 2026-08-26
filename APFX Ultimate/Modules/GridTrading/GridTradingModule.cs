@@ -6,6 +6,8 @@ public sealed class GridTradingModule : IRobotModule
     private const double AtrTargetAmountPerPip = 0.10;
     private const string TargetLineName = "APFXUltimate.Target";
     private const string LockLineName = "APFXUltimate.Lock";
+    private const string TargetLabelName = TargetLineName + ".Label";
+    private const string LockLabelName = LockLineName + ".Label";
     private readonly GridConfiguration _config;
     private readonly GridStatus _status;
     private bool _closingBasket;
@@ -252,15 +254,25 @@ public sealed class GridTradingModule : IRobotModule
         var direction = _activeDirection!.Value;
         var currentPrice = direction == TradeType.Buy ? snapshot.Bid : snapshot.Ask;
         var currentProfit = positions.Sum(position => position.NetProfit);
-        context.DrawHorizontalLine(TargetLineName, GetProfitPrice(currentPrice, _status.EffectiveTarget, direction, currentProfit, totalVolume, snapshot), Color.FromHex("#FFE879F9"));
+        var viewport = context.GetChartViewport();
+        var labelDuration = viewport.EndTime - viewport.StartTime;
+        var hasTrailingLock = _status.TrailingFloor > 0;
+        var targetPrice = GetProfitPrice(currentPrice, _status.EffectiveTarget, direction, currentProfit, totalVolume, snapshot);
+        context.DrawHorizontalLine(TargetLineName, targetPrice, Color.FromHex("#FFE879F9"));
+        var targetLabelTime = hasTrailingLock ? viewport.EndTime.AddTicks(-labelDuration.Ticks / 4) : viewport.EndTime;
+        context.DrawChartText(TargetLabelName, $"Target ${_status.EffectiveTarget:N2}", targetLabelTime, targetPrice, Color.FromHex("#FFE879F9"));
 
-        if (_status.TrailingFloor > 0)
+        if (hasTrailingLock)
         {
-            context.DrawHorizontalLine(LockLineName, GetProfitPrice(currentPrice, _status.TrailingFloor, direction, currentProfit, totalVolume, snapshot), Color.FromHex("#FFFFB74D"));
+            var lockPrice = GetProfitPrice(currentPrice, _status.TrailingFloor, direction, currentProfit, totalVolume, snapshot);
+            context.DrawHorizontalLine(LockLineName, lockPrice, Color.FromHex("#FFFFB74D"));
+            var lockLabelTime = viewport.EndTime.AddTicks(-labelDuration.Ticks * 3 / 5);
+            context.DrawChartText(LockLabelName, $"Trailing Lock ${_status.TrailingFloor:N2}", lockLabelTime, lockPrice, Color.FromHex("#FFFFB74D"));
         }
         else
         {
             context.RemoveChartObject(LockLineName);
+            context.RemoveChartObject(LockLabelName);
         }
     }
     private static double GetProfitPrice(double currentPrice, double desiredProfit, TradeType direction, double currentProfit, double volumeInUnits, MarketSnapshot snapshot)
@@ -274,6 +286,8 @@ public sealed class GridTradingModule : IRobotModule
     {
         context.RemoveChartObject(TargetLineName);
         context.RemoveChartObject(LockLineName);
+        context.RemoveChartObject(TargetLabelName);
+        context.RemoveChartObject(LockLabelName);
     }
     private double AtrScale(MarketSnapshot s) => _config.UseAtr ? Math.Max(0.1, s.AtrPips / _initialAtrPips) : 1;
     private double GetEffectiveTarget(MarketSnapshot snapshot) => _config.UseAtr

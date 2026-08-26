@@ -42,20 +42,30 @@ public sealed class PreviousPeriodLevelsOverlayModule : IRobotModule
         }
 
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        Draw("Day.High", levels.PreviousDay.High, Color.FromHex("#FF4FC3F7"), LineStyle.Dots, activeNames);
-        Draw("Day.Low", levels.PreviousDay.Low, Color.FromHex("#FFFF7F96"), LineStyle.Dots, activeNames);
-        Draw("Day.Close", levels.PreviousDay.Close, Color.FromHex("#FFE9EEF5"), LineStyle.Dots, activeNames);
-        Draw("Week.High", levels.PreviousWeek.High, Color.FromHex("#FFB57BFF"), LineStyle.Solid, activeNames);
-        Draw("Week.Low", levels.PreviousWeek.Low, Color.FromHex("#FFFFA657"), LineStyle.Solid, activeNames);
-        Draw("Week.Close", levels.PreviousWeek.Close, Color.FromHex("#FFFFDF78"), LineStyle.Solid, activeNames);
+        Draw("Day.High", "Previous Day High", levels.PreviousDay.High, Color.FromHex("#FF4FC3F7"), LineStyle.Dots, 1, activeNames);
+        Draw("Day.Low", "Previous Day Low", levels.PreviousDay.Low, Color.FromHex("#FFFF7F96"), LineStyle.Dots, 2, activeNames);
+        Draw("Day.Close", "Previous Day Close", levels.PreviousDay.Close, Color.FromHex("#FFE9EEF5"), LineStyle.Dots, 3, activeNames);
+        Draw("Week.High", "Previous Week High", levels.PreviousWeek.High, Color.FromHex("#FFB57BFF"), LineStyle.Solid, 4, activeNames);
+        Draw("Week.Low", "Previous Week Low", levels.PreviousWeek.Low, Color.FromHex("#FFFFA657"), LineStyle.Solid, 5, activeNames);
+        Draw("Week.Close", "Previous Week Close", levels.PreviousWeek.Close, Color.FromHex("#FFFFDF78"), LineStyle.Solid, 6, activeNames);
         RemoveStaleObjects(activeNames);
     }
 
-    private void Draw(string key, double price, Color color, LineStyle lineStyle, HashSet<string> activeNames)
+    private void Draw(string key, string label, double price, Color color, LineStyle lineStyle, int labelSlot, HashSet<string> activeNames)
     {
         var name = ObjectPrefix + key;
         _context!.DrawGraphHorizontalLine(name, price, color, 1, lineStyle);
         activeNames.Add(name);
+        var labelName = name + ".Label";
+        _context.DrawChartText(labelName, label, GetLabelTime(labelSlot), price, color);
+        activeNames.Add(labelName);
+    }
+
+    private DateTime GetLabelTime(int slot)
+    {
+        var viewport = _context!.GetChartViewport();
+        var visibleDuration = viewport.EndTime - viewport.StartTime;
+        return viewport.EndTime.AddTicks(-visibleDuration.Ticks * slot / 7);
     }
 
     private void RemoveStaleObjects(HashSet<string> activeNames)

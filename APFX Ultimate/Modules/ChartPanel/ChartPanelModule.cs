@@ -15,6 +15,7 @@ public sealed class ChartPanelModule : IRobotModule
     private readonly BollingerBandsOverlayModule _bollingerBandsOverlay;
     private readonly DailyVwapOverlayModule _dailyVwapOverlay;
     private readonly PreviousPeriodLevelsOverlayModule _previousPeriodLevelsOverlay;
+    private readonly MarketPulseLevelsOverlayModule _marketPulseLevelsOverlay;
     private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
     private Border? _panel;
     private AccountStatisticsSection? _accountStatistics;
@@ -25,7 +26,7 @@ public sealed class ChartPanelModule : IRobotModule
     private GraphControlsSection? _graphControls;
     private RobotContext? _context;
 
-    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
+    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
     {
         _position = position;
         _fontSize = fontSize;
@@ -37,6 +38,7 @@ public sealed class ChartPanelModule : IRobotModule
         _bollingerBandsOverlay = bollingerBandsOverlay;
         _dailyVwapOverlay = dailyVwapOverlay;
         _previousPeriodLevelsOverlay = previousPeriodLevelsOverlay;
+        _marketPulseLevelsOverlay = marketPulseLevelsOverlay;
         _volumeProfileOverlay = volumeProfileOverlay;
     }
 
@@ -59,7 +61,7 @@ public sealed class ChartPanelModule : IRobotModule
         _tradingControls = new TradingControlsSection(_fontSize, () => RefreshAccountData(context));
         _indicatorStatus = new IndicatorStatusSection(_fontSize, _atrPeriod);
         _calendarNews = new CalendarNewsSection(_fontSize, _calendarNewsState);
-        _graphControls = new GraphControlsSection(_fontSize, _marketHoursOverlay, _emaOverlay, _bollingerBandsOverlay, _dailyVwapOverlay, _previousPeriodLevelsOverlay, _volumeProfileOverlay);
+        _graphControls = new GraphControlsSection(_fontSize, _marketHoursOverlay, _emaOverlay, _bollingerBandsOverlay, _dailyVwapOverlay, _previousPeriodLevelsOverlay, _marketPulseLevelsOverlay, _volumeProfileOverlay);
         var liveStatusSection = ChartPanelLayout.CreateSection(_openPositionStatistics.CreateControl(context));
         var performanceSection = ChartPanelLayout.CreateSection(_accountStatistics.CreateControl(context, _fontSize));
         primaryColumn.AddChild(liveStatusSection, 0, 0);

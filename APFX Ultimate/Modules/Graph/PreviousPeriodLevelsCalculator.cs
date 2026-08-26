@@ -1,13 +1,12 @@
 namespace cAlgo.Robots;
 
-/// <summary>Finds completed prior daily and weekly bars without relying on bar collection order.</summary>
+/// <summary>Finds the bars immediately preceding cTrader's active daily and weekly candles.</summary>
 public static class PreviousPeriodLevelsCalculator
 {
-    public static PreviousPeriodLevels? Calculate(Bars dailyBars, Bars weeklyBars, DateTime nowUtc)
+    public static PreviousPeriodLevels? Calculate(Bars dailyBars, Bars weeklyBars)
     {
-        var currentWeekStart = nowUtc.Date.AddDays(-((int)nowUtc.DayOfWeek + 6) % 7);
-        if (TryGetLastCompletedBar(dailyBars, nowUtc.Date) is not { } previousDay ||
-            TryGetLastCompletedBar(weeklyBars, currentWeekStart) is not { } previousWeek)
+        if (TryGetPreviousCompletedBar(dailyBars) is not { } previousDay ||
+            TryGetPreviousCompletedBar(weeklyBars) is not { } previousWeek)
         {
             return null;
         }
@@ -15,18 +14,16 @@ public static class PreviousPeriodLevelsCalculator
         return new PreviousPeriodLevels(previousDay, previousWeek);
     }
 
-    private static PeriodLevels? TryGetLastCompletedBar(Bars bars, DateTime currentPeriodStart)
+    private static PeriodLevels? TryGetPreviousCompletedBar(Bars bars)
     {
-        for (var index = bars.Count - 1; index >= 0; index--)
+        // The last bar is cTrader's live candle, even when the broker session opens
+        // outside UTC midnight. The preceding bar is therefore the last completed one.
+        if (bars.Count < 2)
         {
-            if (bars.OpenTimes[index] >= currentPeriodStart)
-            {
-                continue;
-            }
-
-            return new PeriodLevels(bars.HighPrices[index], bars.LowPrices[index], bars.ClosePrices[index]);
+            return null;
         }
 
-        return null;
+        var index = bars.Count - 2;
+        return new PeriodLevels(bars.HighPrices[index], bars.LowPrices[index], bars.ClosePrices[index]);
     }
 }
