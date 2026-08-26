@@ -193,7 +193,7 @@ public sealed class MarketPulseLevelsOverlayModule : IRobotModule
         {
             var key = ObjectPrefix + level.CreatedAt.ToString("yyyyMMddHHmmss") + "." + level.Price.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
             var isResistance = level.Price > currentPrice;
-            var color = isResistance ? Color.FromHex("#FFFF7F96") : Color.FromHex("#FF55D6BE");
+            var color = isResistance ? GraphColorPalette.StrongResistance : GraphColorPalette.StrongSupport;
             var lineEndTime = _context.ServerTime > level.CreatedAt ? _context.ServerTime : viewport.EndTime;
             _context.DrawChartTrendLine(key, level.CreatedAt, level.Price, lineEndTime, level.Price, color, 2);
             activeNames.Add(key);

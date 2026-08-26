@@ -20,9 +20,9 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(15);
     private static readonly SessionDefinition[] SessionDefinitions =
     {
-        new(GlobalMarketSession.Asia, TimeSpan.Zero, TimeSpan.FromHours(9), Color.FromHex("#FF8B7CFF")),
-        new(GlobalMarketSession.Europe, TimeSpan.FromHours(7), TimeSpan.FromHours(16), Color.FromHex("#FF2CB8F5")),
-        new(GlobalMarketSession.UnitedStates, TimeSpan.FromHours(13), TimeSpan.FromHours(22), Color.FromHex("#FFF7B955"))
+        new(GlobalMarketSession.Asia, TimeSpan.Zero, TimeSpan.FromHours(9), GraphColorPalette.AsiaSession),
+        new(GlobalMarketSession.Europe, TimeSpan.FromHours(7), TimeSpan.FromHours(16), GraphColorPalette.EuropeSession),
+        new(GlobalMarketSession.UnitedStates, TimeSpan.FromHours(13), TimeSpan.FromHours(22), GraphColorPalette.UnitedStatesSession)
     };
 
     private readonly Dictionary<GlobalMarketSession, bool> _enabledSessions;
@@ -255,15 +255,15 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     {
         if (IsMultipleOf(price, preset.MajorStep))
         {
-            return (Color.FromHex("#FFE6B85C"), 2, LineStyle.Solid);
+            return (GraphColorPalette.PriceLevelMajor, 2, LineStyle.Solid);
         }
 
         if (IsMultipleOf(price, preset.MediumStep))
         {
-            return (Color.FromHex("#FF79D5F7"), 1, LineStyle.Solid);
+            return (GraphColorPalette.PriceLevelMid, 1, LineStyle.Solid);
         }
 
-        return (Color.FromHex("#FF627E9B"), 1, LineStyle.Dots);
+        return (GraphColorPalette.PriceLevelMinor, 1, LineStyle.Dots);
     }
 
     private static bool IsMultipleOf(double value, double step) => Math.Abs(value / step - Math.Round(value / step)) < 0.00001;

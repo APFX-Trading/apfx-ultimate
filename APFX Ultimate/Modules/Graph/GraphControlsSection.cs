@@ -38,18 +38,18 @@ public sealed class GraphControlsSection
             HorizontalAlignment = HorizontalAlignment.Center
         });
 
-        section.AddChild(CreateSessionToggle(GlobalMarketSession.Asia, "Asia  00:00-09:00 UTC", Color.FromHex("#FF8B7CFF")));
-        section.AddChild(CreateSessionToggle(GlobalMarketSession.Europe, "Europe  07:00-16:00 UTC", Color.FromHex("#FF2CB8F5")));
-        section.AddChild(CreateSessionToggle(GlobalMarketSession.UnitedStates, "US  13:00-22:00 UTC", Color.FromHex("#FFF7B955")));
+        section.AddChild(CreateSessionToggle(GlobalMarketSession.Asia, "Asia  00:00-09:00 UTC", GraphColorPalette.AsiaSession));
+        section.AddChild(CreateSessionToggle(GlobalMarketSession.Europe, "Europe  07:00-16:00 UTC", GraphColorPalette.EuropeSession));
+        section.AddChild(CreateSessionToggle(GlobalMarketSession.UnitedStates, "US  13:00-22:00 UTC", GraphColorPalette.UnitedStatesSession));
         if (_marketHoursOverlay.SupportsPsychologicalLevels)
         {
             section.AddChild(CreatePsychologicalLevelsToggle());
         }
         section.AddChild(CreateEmaToggle());
         section.AddChild(CreateBollingerBandsToggle());
-        section.AddChild(CreateOverlayToggle(_dailyVwapOverlay.Label, _dailyVwapOverlay.IsEnabled, _dailyVwapOverlay.SetEnabled, "#FFFF5C8A", "#FF55D6BE", "#FF7C8CFF"));
-        section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, "#FF4FC3F7", "#FFFF7F96", "#FFE9EEF5", "#FFB57BFF", "#FFFFA657", "#FFFFDF78"));
-        section.AddChild(CreateOverlayToggle(_marketPulseLevelsOverlay.Label, _marketPulseLevelsOverlay.IsEnabled, _marketPulseLevelsOverlay.SetEnabled, "#FF55D6BE", "#FFFF7F96"));
+        section.AddChild(CreateOverlayToggle(_dailyVwapOverlay.Label, _dailyVwapOverlay.IsEnabled, _dailyVwapOverlay.SetEnabled, GraphColorPalette.Vwap, GraphColorPalette.VwapOneDeviation, GraphColorPalette.VwapTwoDeviation));
+        section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, GraphColorPalette.PreviousDayHigh, GraphColorPalette.PreviousDayLow, GraphColorPalette.PreviousDayClose, GraphColorPalette.PreviousWeekHigh, GraphColorPalette.PreviousWeekLow, GraphColorPalette.PreviousWeekClose));
+        section.AddChild(CreateOverlayToggle(_marketPulseLevelsOverlay.Label, _marketPulseLevelsOverlay.IsEnabled, _marketPulseLevelsOverlay.SetEnabled, GraphColorPalette.StrongSupport, GraphColorPalette.StrongResistance));
         section.AddChild(CreateVolumeProfileToggle());
         return section;
     }
@@ -90,9 +90,9 @@ public sealed class GraphControlsSection
         };
         checkBox.Click += args => _marketHoursOverlay.SetPsychologicalLevelsEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
-        AddColorSwatch(row, Color.FromHex("#FF627E9B"));
-        AddColorSwatch(row, Color.FromHex("#FF79D5F7"));
-        AddColorSwatch(row, Color.FromHex("#FFE6B85C"));
+        AddColorSwatch(row, GraphColorPalette.PriceLevelMinor);
+        AddColorSwatch(row, GraphColorPalette.PriceLevelMid);
+        AddColorSwatch(row, GraphColorPalette.PriceLevelMajor);
         return row;
     }
 
@@ -124,8 +124,8 @@ public sealed class GraphControlsSection
         };
         checkBox.Click += args => _emaOverlay.SetEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
-        AddColorSwatch(row, Color.FromHex("#FF65F2A5"));
-        AddColorSwatch(row, Color.FromHex("#FFFD77D4"));
+        AddColorSwatch(row, GraphColorPalette.EmaFast);
+        AddColorSwatch(row, GraphColorPalette.EmaSlow);
         return row;
     }
 
@@ -145,8 +145,8 @@ public sealed class GraphControlsSection
         };
         checkBox.Click += args => _bollingerBandsOverlay.SetEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
-        AddColorSwatch(row, Color.FromHex("#FF4FC3F7"));
-        AddColorSwatch(row, Color.FromHex("#FFF3F6FA"));
+        AddColorSwatch(row, GraphColorPalette.BollingerOuter);
+        AddColorSwatch(row, GraphColorPalette.BollingerMiddle);
         return row;
     }
 
@@ -166,12 +166,12 @@ public sealed class GraphControlsSection
         };
         checkBox.Click += args => _volumeProfileOverlay.SetEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
-        AddColorSwatch(row, Color.FromHex("#FF2CB8F5"));
-        AddColorSwatch(row, Color.FromHex("#FFFFB74D"));
+        AddColorSwatch(row, GraphColorPalette.VolumeProfile);
+        AddColorSwatch(row, GraphColorPalette.VolumeProfilePointOfControl);
         return row;
     }
 
-    private ControlBase CreateOverlayToggle(string text, bool isEnabled, Action<bool> setEnabled, params string[] colors)
+    private ControlBase CreateOverlayToggle(string text, bool isEnabled, Action<bool> setEnabled, params Color[] colors)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
         var checkBox = new CheckBox
@@ -183,7 +183,7 @@ public sealed class GraphControlsSection
         };
         checkBox.Click += args => setEnabled(args.CheckBox.IsChecked == true);
         row.AddChild(checkBox);
-        foreach (var color in colors) AddColorSwatch(row, Color.FromHex(color));
+        foreach (var color in colors) AddColorSwatch(row, color);
         return row;
     }
 }

@@ -84,15 +84,15 @@ public sealed class DailyVolumeProfileOverlayModule : IRobotModule
                 var barEnd = profile.StartTime.AddTicks((long)((profileEnd - profile.StartTime).Ticks * volume / maximumVolume));
                 var name = ObjectPrefix + profile.StartTime.ToString("yyyyMMdd") + ".bin." + bin;
                 var color = bin == profile.PointOfControlIndex
-                    ? Color.FromArgb(150, Color.FromHex("#FFFFB74D"))
-                    : Color.FromArgb(82, Color.FromHex("#FF2CB8F5"));
+                    ? Color.FromArgb(150, GraphColorPalette.VolumeProfilePointOfControl)
+                    : Color.FromArgb(82, GraphColorPalette.VolumeProfile);
                 _context.DrawChartRectangle(name, profile.StartTime, barEnd, binStart, binEnd, color);
                 activeNames.Add(name);
             }
 
             var pointOfControl = profile.Low + (profile.PointOfControlIndex + 0.5) * profile.RowHeight;
             var pocName = ObjectPrefix + profile.StartTime.ToString("yyyyMMdd") + ".poc";
-            _context.DrawChartTrendLine(pocName, profile.StartTime, pointOfControl, profile.EndTime, pointOfControl, Color.FromHex("#FFFFB74D"), 1);
+            _context.DrawChartTrendLine(pocName, profile.StartTime, pointOfControl, profile.EndTime, pointOfControl, GraphColorPalette.VolumeProfilePointOfControl, 1);
             activeNames.Add(pocName);
         }
 

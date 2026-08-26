@@ -68,21 +68,21 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     private void RenderFullPath(DailyVwapData data)
     {
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        DrawFullLine("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, "Daily VWAP", activeNames);
-        DrawFullLine("UpperOne", data.UpperOne, Color.FromHex("#FF55D6BE"), 1, null, activeNames);
-        DrawFullLine("LowerOne", data.LowerOne, Color.FromHex("#FF55D6BE"), 1, null, activeNames);
-        DrawFullLine("UpperTwo", data.UpperTwo, Color.FromHex("#FF7C8CFF"), 1, null, activeNames);
-        DrawFullLine("LowerTwo", data.LowerTwo, Color.FromHex("#FF7C8CFF"), 1, null, activeNames);
+        DrawFullLine("Vwap", data.Vwap, GraphColorPalette.Vwap, 2, "Daily VWAP", activeNames);
+        DrawFullLine("UpperOne", data.UpperOne, GraphColorPalette.VwapOneDeviation, 1, null, activeNames);
+        DrawFullLine("LowerOne", data.LowerOne, GraphColorPalette.VwapOneDeviation, 1, null, activeNames);
+        DrawFullLine("UpperTwo", data.UpperTwo, GraphColorPalette.VwapTwoDeviation, 1, null, activeNames);
+        DrawFullLine("LowerTwo", data.LowerTwo, GraphColorPalette.VwapTwoDeviation, 1, null, activeNames);
         RemoveStaleObjects(activeNames);
     }
 
     private void UpdateLatestSegments(DailyVwapData data)
     {
-        DrawLatestSegment("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, "Daily VWAP");
-        DrawLatestSegment("UpperOne", data.UpperOne, Color.FromHex("#FF55D6BE"), 1, null);
-        DrawLatestSegment("LowerOne", data.LowerOne, Color.FromHex("#FF55D6BE"), 1, null);
-        DrawLatestSegment("UpperTwo", data.UpperTwo, Color.FromHex("#FF7C8CFF"), 1, null);
-        DrawLatestSegment("LowerTwo", data.LowerTwo, Color.FromHex("#FF7C8CFF"), 1, null);
+        DrawLatestSegment("Vwap", data.Vwap, GraphColorPalette.Vwap, 2, "Daily VWAP");
+        DrawLatestSegment("UpperOne", data.UpperOne, GraphColorPalette.VwapOneDeviation, 1, null);
+        DrawLatestSegment("LowerOne", data.LowerOne, GraphColorPalette.VwapOneDeviation, 1, null);
+        DrawLatestSegment("UpperTwo", data.UpperTwo, GraphColorPalette.VwapTwoDeviation, 1, null);
+        DrawLatestSegment("LowerTwo", data.LowerTwo, GraphColorPalette.VwapTwoDeviation, 1, null);
     }
 
     private void DrawFullLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label, HashSet<string> activeNames)

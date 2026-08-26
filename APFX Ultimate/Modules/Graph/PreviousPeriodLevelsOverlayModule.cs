@@ -42,12 +42,12 @@ public sealed class PreviousPeriodLevelsOverlayModule : IRobotModule
         }
 
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        Draw("Day.High", "Previous Day High", levels.PreviousDay.High, Color.FromHex("#FF4FC3F7"), LineStyle.Dots, 1, activeNames);
-        Draw("Day.Low", "Previous Day Low", levels.PreviousDay.Low, Color.FromHex("#FFFF7F96"), LineStyle.Dots, 2, activeNames);
-        Draw("Day.Close", "Previous Day Close", levels.PreviousDay.Close, Color.FromHex("#FFE9EEF5"), LineStyle.Dots, 3, activeNames);
-        Draw("Week.High", "Previous Week High", levels.PreviousWeek.High, Color.FromHex("#FFB57BFF"), LineStyle.Solid, 4, activeNames);
-        Draw("Week.Low", "Previous Week Low", levels.PreviousWeek.Low, Color.FromHex("#FFFFA657"), LineStyle.Solid, 5, activeNames);
-        Draw("Week.Close", "Previous Week Close", levels.PreviousWeek.Close, Color.FromHex("#FFFFDF78"), LineStyle.Solid, 6, activeNames);
+        Draw("Day.High", "Previous Day High", levels.PreviousDay.High, GraphColorPalette.PreviousDayHigh, LineStyle.Dots, 1, activeNames);
+        Draw("Day.Low", "Previous Day Low", levels.PreviousDay.Low, GraphColorPalette.PreviousDayLow, LineStyle.Dots, 2, activeNames);
+        Draw("Day.Close", "Previous Day Close", levels.PreviousDay.Close, GraphColorPalette.PreviousDayClose, LineStyle.Dots, 3, activeNames);
+        Draw("Week.High", "Previous Week High", levels.PreviousWeek.High, GraphColorPalette.PreviousWeekHigh, LineStyle.Solid, 4, activeNames);
+        Draw("Week.Low", "Previous Week Low", levels.PreviousWeek.Low, GraphColorPalette.PreviousWeekLow, LineStyle.Solid, 5, activeNames);
+        Draw("Week.Close", "Previous Week Close", levels.PreviousWeek.Close, GraphColorPalette.PreviousWeekClose, LineStyle.Solid, 6, activeNames);
         RemoveStaleObjects(activeNames);
     }
 

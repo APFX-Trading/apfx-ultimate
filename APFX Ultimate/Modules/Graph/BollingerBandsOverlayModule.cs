@@ -70,9 +70,9 @@ public sealed class BollingerBandsOverlayModule : IRobotModule
         }
         else
         {
-            UpdateLatestSegment(BollingerBandLine.Top, Color.FromHex("#FF4FC3F7"));
-            UpdateLatestSegment(BollingerBandLine.Main, Color.FromHex("#FFF3F6FA"));
-            UpdateLatestSegment(BollingerBandLine.Bottom, Color.FromHex("#FF4FC3F7"));
+            UpdateLatestSegment(BollingerBandLine.Top, GraphColorPalette.BollingerOuter);
+            UpdateLatestSegment(BollingerBandLine.Main, GraphColorPalette.BollingerMiddle);
+            UpdateLatestSegment(BollingerBandLine.Bottom, GraphColorPalette.BollingerOuter);
         }
         _nextRefreshAt = _context.ServerTime.Add(RefreshInterval);
     }
@@ -80,9 +80,9 @@ public sealed class BollingerBandsOverlayModule : IRobotModule
     private void RenderFullPath(ChartViewport viewport)
     {
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        DrawFullLine(BollingerBandLine.Top, Color.FromHex("#FF4FC3F7"), activeNames);
-        DrawFullLine(BollingerBandLine.Main, Color.FromHex("#FFF3F6FA"), activeNames);
-        DrawFullLine(BollingerBandLine.Bottom, Color.FromHex("#FF4FC3F7"), activeNames);
+        DrawFullLine(BollingerBandLine.Top, GraphColorPalette.BollingerOuter, activeNames);
+        DrawFullLine(BollingerBandLine.Main, GraphColorPalette.BollingerMiddle, activeNames);
+        DrawFullLine(BollingerBandLine.Bottom, GraphColorPalette.BollingerOuter, activeNames);
         foreach (var staleName in _objectNames.Except(activeNames).ToArray()) _context!.RemoveChartObject(staleName);
         _objectNames.Clear();
         _objectNames.UnionWith(activeNames);
