@@ -9,6 +9,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     private readonly HashSet<string> _objectNames = new(StringComparer.Ordinal);
     private RobotContext? _context;
     private DateTime _nextRefreshAt = DateTime.MinValue;
+    private DateTime _renderedSessionDate = DateTime.MinValue;
 
     public DailyVwapOverlayModule(bool isEnabled) => IsEnabled = isEnabled;
 
@@ -50,37 +51,78 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         }
 
         var data = _context.GetDailyVwapData();
-        var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        DrawLine("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, "Daily VWAP", activeNames);
-        DrawLine("UpperOne", data.UpperOne, Color.FromHex("#FF55D6BE"), 1, activeNames);
-        DrawLine("LowerOne", data.LowerOne, Color.FromHex("#FF55D6BE"), 1, activeNames);
-        DrawLine("UpperTwo", data.UpperTwo, Color.FromHex("#FF7C8CFF"), 1, activeNames);
-        DrawLine("LowerTwo", data.LowerTwo, Color.FromHex("#FF7C8CFF"), 1, activeNames);
-        RemoveStaleObjects(activeNames);
+        var sessionDate = data.Vwap.Count == 0 ? DateTime.MinValue : data.Vwap[0].Time.Date;
+        if (force || sessionDate != _renderedSessionDate)
+        {
+            RenderFullPath(data);
+            _renderedSessionDate = sessionDate;
+        }
+        else
+        {
+            UpdateLatestSegments(data);
+        }
+
         _nextRefreshAt = _context.ServerTime.Add(RefreshInterval);
     }
 
-    private void DrawLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, HashSet<string> activeNames) => DrawLine(key, points, color, thickness, null, activeNames);
+    private void RenderFullPath(DailyVwapData data)
+    {
+        var activeNames = new HashSet<string>(StringComparer.Ordinal);
+        DrawFullLine("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, "Daily VWAP", activeNames);
+        DrawFullLine("UpperOne", data.UpperOne, Color.FromHex("#FF55D6BE"), 1, null, activeNames);
+        DrawFullLine("LowerOne", data.LowerOne, Color.FromHex("#FF55D6BE"), 1, null, activeNames);
+        DrawFullLine("UpperTwo", data.UpperTwo, Color.FromHex("#FF7C8CFF"), 1, null, activeNames);
+        DrawFullLine("LowerTwo", data.LowerTwo, Color.FromHex("#FF7C8CFF"), 1, null, activeNames);
+        RemoveStaleObjects(activeNames);
+    }
 
-    private void DrawLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label, HashSet<string> activeNames)
+    private void UpdateLatestSegments(DailyVwapData data)
+    {
+        DrawLatestSegment("Vwap", data.Vwap, Color.FromHex("#FFFF5C8A"), 2, "Daily VWAP");
+        DrawLatestSegment("UpperOne", data.UpperOne, Color.FromHex("#FF55D6BE"), 1, null);
+        DrawLatestSegment("LowerOne", data.LowerOne, Color.FromHex("#FF55D6BE"), 1, null);
+        DrawLatestSegment("UpperTwo", data.UpperTwo, Color.FromHex("#FF7C8CFF"), 1, null);
+        DrawLatestSegment("LowerTwo", data.LowerTwo, Color.FromHex("#FF7C8CFF"), 1, null);
+    }
+
+    private void DrawFullLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label, HashSet<string> activeNames)
     {
         var sampledPoints = Downsample(points);
         for (var index = 1; index < sampledPoints.Count; index++)
         {
-            var start = sampledPoints[index - 1];
-            var end = sampledPoints[index];
-            var name = $"{ObjectPrefix}{key}.{start.Time:yyyyMMddHHmmss}";
-            _context!.DrawChartTrendLine(name, start.Time, start.Price, end.Time, end.Price, color, thickness);
+            DrawSegment(key, sampledPoints[index - 1], sampledPoints[index], color, thickness);
+            var name = GetSegmentName(key, sampledPoints[index - 1]);
             activeNames.Add(name);
         }
 
+        DrawLabel(key, label, sampledPoints, color, activeNames);
+    }
+
+    private void DrawLatestSegment(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label)
+    {
+        var sampledPoints = Downsample(points);
+        if (sampledPoints.Count >= 2)
+        {
+            DrawSegment(key, sampledPoints[^2], sampledPoints[^1], color, thickness);
+        }
+
+        DrawLabel(key, label, sampledPoints, color, null);
+    }
+
+    private void DrawLabel(string key, string? label, IReadOnlyList<ChartTimePricePoint> sampledPoints, Color color, HashSet<string>? activeNames)
+    {
         if (label is not null && sampledPoints.Count > 0)
         {
             var labelName = ObjectPrefix + key + ".Label";
             _context!.DrawChartText(labelName, label, _context.GetChartViewport().EndTime, sampledPoints[^1].Price, color);
-            activeNames.Add(labelName);
+            activeNames?.Add(labelName);
         }
     }
+
+    private void DrawSegment(string key, ChartTimePricePoint start, ChartTimePricePoint end, Color color, int thickness) =>
+        _context!.DrawChartTrendLine(GetSegmentName(key, start), start.Time, start.Price, end.Time, end.Price, color, thickness);
+
+    private static string GetSegmentName(string key, ChartTimePricePoint start) => $"{ObjectPrefix}{key}.{start.Time:yyyyMMddHHmmss}";
 
     private static IReadOnlyList<ChartTimePricePoint> Downsample(IReadOnlyList<ChartTimePricePoint> points)
     {
@@ -120,5 +162,6 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         if (_context is null) return;
         foreach (var name in _objectNames) _context.RemoveChartObject(name);
         _objectNames.Clear();
+        _renderedSessionDate = DateTime.MinValue;
     }
 }

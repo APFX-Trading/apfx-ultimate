@@ -170,6 +170,7 @@ public partial class APFXUltimate : Robot
         var slowEma = Indicators.MovingAverage(Bars.ClosePrices, EmaSlowPeriod, MovingAverageType.Exponential);
         var bollingerBands = Indicators.BollingerBands(Bars.ClosePrices, BollingerPeriod, BollingerStandardDeviations, MovingAverageType.Simple);
         var minuteBars = MarketData.GetBars(TimeFrame.Minute, SymbolName);
+        var volumeProfileCache = new DailyVolumeProfileCache(minuteBars);
         var dailyBars = MarketData.GetBars(TimeFrame.Daily, SymbolName);
         var weeklyBars = MarketData.GetBars(TimeFrame.Weekly, SymbolName);
         var rsiM1 = Indicators.RelativeStrengthIndex(MarketData.GetBars(TimeFrame.Minute, SymbolName).ClosePrices, 14);
@@ -240,7 +241,7 @@ public partial class APFXUltimate : Robot
             },
             getDailyVwapData: () => DailyVwapCalculator.Calculate(minuteBars, Server.TimeInUtc),
             getPreviousPeriodLevels: () => PreviousPeriodLevelsCalculator.Calculate(dailyBars, weeklyBars),
-            getDailyVolumeProfiles: (daysToShow, rowCount) => VolumeProfileCalculator.Calculate(minuteBars, Server.TimeInUtc, daysToShow, rowCount),
+            getDailyVolumeProfiles: (daysToShow, rowCount) => volumeProfileCache.GetProfiles(Server.TimeInUtc, daysToShow, rowCount),
             drawChartTrendLine: (name, startTime, startPrice, endTime, endPrice, color, thickness) => Chart.DrawTrendLine(name, startTime, startPrice, endTime, endPrice, color, thickness, LineStyle.Solid),
             addChartControl: control => Chart.AddControl(control),
             removeChartControl: control => Chart.RemoveControl(control),

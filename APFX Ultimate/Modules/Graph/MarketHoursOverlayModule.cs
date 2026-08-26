@@ -17,6 +17,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     private const string PsychologicalLevelObjectPrefix = "APFXUltimate.Graph.PsychologicalLevel.";
     private const int SessionBackgroundOpacity = 48;
     private const int SessionEdgeOpacity = 92;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(15);
     private static readonly SessionDefinition[] SessionDefinitions =
     {
         new(GlobalMarketSession.Asia, TimeSpan.Zero, TimeSpan.FromHours(9), Color.FromHex("#FF8B7CFF")),
@@ -33,6 +34,9 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     private RobotContext? _context;
     private double? _lastPsychologicalLevelMinimum;
     private double? _lastPsychologicalLevelMaximum;
+    private DateTime _nextRefreshAt = DateTime.MinValue;
+    private DateTime _lastViewportStart = DateTime.MinValue;
+    private DateTime _lastViewportEnd = DateTime.MinValue;
 
     public MarketHoursOverlayModule(bool showAsia, bool showEurope, bool showUnitedStates, bool showPsychologicalLevels, string symbolName)
     {
@@ -57,14 +61,14 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     public void OnStart(RobotContext context)
     {
         _context = context;
-        Render();
+        Render(force: true);
     }
 
     public void OnTick(RobotContext context)
     {
     }
 
-    public void OnTimer(RobotContext context) => Render();
+    public void OnTimer(RobotContext context) => Render(force: false);
 
     public void OnStop(RobotContext context)
     {
@@ -75,7 +79,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     public void SetEnabled(GlobalMarketSession session, bool isEnabled)
     {
         _enabledSessions[session] = isEnabled;
-        Render();
+        Render(force: true);
     }
 
     public void SetPsychologicalLevelsEnabled(bool isEnabled)
@@ -93,7 +97,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         RenderPsychologicalLevels();
     }
 
-    private void Render()
+    private void Render(bool force)
     {
         if (_context is null)
         {
@@ -102,6 +106,12 @@ public sealed class MarketHoursOverlayModule : IRobotModule
 
         var viewport = _context.GetChartViewport();
         if (viewport.EndTime <= viewport.StartTime || viewport.TopPrice <= viewport.BottomPrice)
+        {
+            return;
+        }
+
+        var viewportChanged = _lastViewportStart != viewport.StartTime || _lastViewportEnd != viewport.EndTime;
+        if (!force && !viewportChanged && _context.ServerTime < _nextRefreshAt)
         {
             return;
         }
@@ -149,6 +159,9 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         _renderedObjectNames.UnionWith(activeNames);
         RenderPsychologicalLevels();
         RenderUpcomingSessionMarker();
+        _lastViewportStart = viewport.StartTime;
+        _lastViewportEnd = viewport.EndTime;
+        _nextRefreshAt = _context.ServerTime.Add(RefreshInterval);
     }
 
     private void RenderUpcomingSessionMarker()
@@ -358,6 +371,8 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         _renderedObjectNames.Clear();
         ClearUpcomingSessionMarker();
         ClearPsychologicalLevels();
+        _lastViewportStart = DateTime.MinValue;
+        _lastViewportEnd = DateTime.MinValue;
     }
 
     private void ClearUpcomingSessionMarker()

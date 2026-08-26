@@ -15,7 +15,7 @@ public static class VolumeProfileCalculator
         {
             var start = nowUtc.Date.AddDays(-offset);
             var end = offset == 0 ? nowUtc : start.AddDays(1);
-            if (end <= start || TryBuildProfile(bars, start, end, rowCount) is not { } profile)
+            if (end <= start || CalculateDay(bars, start, end, rowCount) is not { } profile)
             {
                 continue;
             }
@@ -26,7 +26,7 @@ public static class VolumeProfileCalculator
         return profiles;
     }
 
-    private static DailyVolumeProfile? TryBuildProfile(Bars bars, DateTime start, DateTime end, int rowCount)
+    public static DailyVolumeProfile? CalculateDay(Bars bars, DateTime start, DateTime end, int rowCount)
     {
         var firstIndex = bars.OpenTimes.GetIndexByTime(start);
         while (firstIndex >= 0 && firstIndex < bars.Count && bars.OpenTimes[firstIndex] < start)
