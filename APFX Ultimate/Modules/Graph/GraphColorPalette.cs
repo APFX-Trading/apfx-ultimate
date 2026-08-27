@@ -11,8 +11,14 @@ public static class GraphColorPalette
     public static readonly Color UnitedStatesSession = Color.FromHex("#FFF7B955");
 
     public static readonly Color PriceLevelMinor = Color.FromHex("#FF627E9B");
+    public static readonly Color PriceLevelMinorMuted = Color.FromHex("#FF35424F");
+    public static readonly Color PriceLevelMinorDistant = Color.FromHex("#FF202A33");
     public static readonly Color PriceLevelMid = Color.FromHex("#FF79D5F7");
+    public static readonly Color PriceLevelMidMuted = Color.FromHex("#FF315F71");
+    public static readonly Color PriceLevelMidDistant = Color.FromHex("#FF1D3A47");
     public static readonly Color PriceLevelMajor = Color.FromHex("#FFE6B85C");
+    public static readonly Color PriceLevelMajorMuted = Color.FromHex("#FF7A5D1E");
+    public static readonly Color PriceLevelMajorDistant = Color.FromHex("#FF483713");
 
     public static readonly Color EmaFast = Color.FromHex("#FF65F2A5");
     public static readonly Color EmaSlow = Color.FromHex("#FFFD77D4");

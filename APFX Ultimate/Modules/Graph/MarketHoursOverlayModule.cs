@@ -34,6 +34,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     private RobotContext? _context;
     private double? _lastPsychologicalLevelMinimum;
     private double? _lastPsychologicalLevelMaximum;
+    private double? _lastPsychologicalLevelReferencePrice;
     private DateTime _nextRefreshAt = DateTime.MinValue;
     private DateTime _lastViewportStart = DateTime.MinValue;
     private DateTime _lastViewportEnd = DateTime.MinValue;
@@ -87,6 +88,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         IsPsychologicalLevelsEnabled = isEnabled;
         _lastPsychologicalLevelMinimum = null;
         _lastPsychologicalLevelMaximum = null;
+        _lastPsychologicalLevelReferencePrice = null;
 
         if (!isEnabled)
         {
@@ -225,7 +227,10 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         var viewport = _context.GetChartViewport();
         var minimum = Math.Floor(viewport.BottomPrice / preset.MinorStep) * preset.MinorStep;
         var maximum = Math.Ceiling(viewport.TopPrice / preset.MinorStep) * preset.MinorStep;
-        if (_lastPsychologicalLevelMinimum == minimum && _lastPsychologicalLevelMaximum == maximum)
+        var referencePrice = Math.Round(_context.GetMarketSnapshot().Bid / preset.MinorStep) * preset.MinorStep;
+        if (_lastPsychologicalLevelMinimum == minimum &&
+            _lastPsychologicalLevelMaximum == maximum &&
+            _lastPsychologicalLevelReferencePrice == referencePrice)
         {
             return;
         }
@@ -234,7 +239,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         for (var price = minimum; price <= maximum + preset.MinorStep / 100; price += preset.MinorStep)
         {
             var roundedPrice = Math.Round(price, 6);
-            var (color, thickness, lineStyle) = GetPsychologicalLevelStyle(roundedPrice, preset);
+            var (color, thickness, lineStyle) = GetPsychologicalLevelStyle(roundedPrice, preset, referencePrice, viewport.TopPrice - viewport.BottomPrice);
             var name = PsychologicalLevelObjectPrefix + roundedPrice.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
             _context.DrawGraphHorizontalLine(name, roundedPrice, color, thickness, lineStyle);
             activeNames.Add(name);
@@ -249,21 +254,55 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         _psychologicalLevelObjectNames.UnionWith(activeNames);
         _lastPsychologicalLevelMinimum = minimum;
         _lastPsychologicalLevelMaximum = maximum;
+        _lastPsychologicalLevelReferencePrice = referencePrice;
     }
 
-    private static (Color Color, int Thickness, LineStyle LineStyle) GetPsychologicalLevelStyle(double price, PsychologicalLevelPreset preset)
+    private static (Color Color, int Thickness, LineStyle LineStyle) GetPsychologicalLevelStyle(double price, PsychologicalLevelPreset preset, double referencePrice, double visiblePriceRange)
     {
+        Color baseColor;
+        Color mutedColor;
+        Color distantColor;
+        int thickness;
+        LineStyle lineStyle;
         if (IsMultipleOf(price, preset.MajorStep))
         {
-            return (GraphColorPalette.PriceLevelMajor, 2, LineStyle.Solid);
+            baseColor = GraphColorPalette.PriceLevelMajor;
+            mutedColor = GraphColorPalette.PriceLevelMajorMuted;
+            distantColor = GraphColorPalette.PriceLevelMajorDistant;
+            thickness = 2;
+            lineStyle = LineStyle.Solid;
         }
-
-        if (IsMultipleOf(price, preset.MediumStep))
+        else if (IsMultipleOf(price, preset.MediumStep))
         {
-            return (GraphColorPalette.PriceLevelMid, 1, LineStyle.Solid);
+            baseColor = GraphColorPalette.PriceLevelMid;
+            mutedColor = GraphColorPalette.PriceLevelMidMuted;
+            distantColor = GraphColorPalette.PriceLevelMidDistant;
+            thickness = 1;
+            lineStyle = LineStyle.Solid;
+        }
+        else
+        {
+            baseColor = GraphColorPalette.PriceLevelMinor;
+            mutedColor = GraphColorPalette.PriceLevelMinorMuted;
+            distantColor = GraphColorPalette.PriceLevelMinorDistant;
+            thickness = 1;
+            lineStyle = LineStyle.Dots;
         }
 
-        return (GraphColorPalette.PriceLevelMinor, 1, LineStyle.Dots);
+        var nearbyDistance = Math.Max(preset.MajorStep * 1.5, visiblePriceRange * 0.12);
+        var distantDistance = Math.Max(preset.MajorStep * 8, visiblePriceRange * 0.65);
+        var fadeProgress = Math.Clamp((Math.Abs(price - referencePrice) - nearbyDistance) / Math.Max(1, distantDistance - nearbyDistance), 0, 1);
+        if (fadeProgress >= 0.65)
+        {
+            return (distantColor, 1, LineStyle.Dots);
+        }
+
+        if (fadeProgress >= 0.2)
+        {
+            return (mutedColor, 1, lineStyle == LineStyle.Solid ? LineStyle.Dots : lineStyle);
+        }
+
+        return (baseColor, thickness, lineStyle);
     }
 
     private static bool IsMultipleOf(double value, double step) => Math.Abs(value / step - Math.Round(value / step)) < 0.00001;
@@ -405,6 +444,7 @@ public sealed class MarketHoursOverlayModule : IRobotModule
         _psychologicalLevelObjectNames.Clear();
         _lastPsychologicalLevelMinimum = null;
         _lastPsychologicalLevelMaximum = null;
+        _lastPsychologicalLevelReferencePrice = null;
     }
 
     private sealed record SessionDefinition(GlobalMarketSession Session, TimeSpan Start, TimeSpan End, Color Color);
