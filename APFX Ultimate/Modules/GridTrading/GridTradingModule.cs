@@ -4,6 +4,7 @@ namespace cAlgo.Robots;
 public sealed class GridTradingModule : IRobotModule
 {
     private const double AtrTargetAmountPerPip = 0.10;
+    private const double MinimumAtrDistanceAmount = 15.0;
     private const string TargetLineName = "APFXUltimate.Target";
     private const string LockLineName = "APFXUltimate.Lock";
     private const string TargetLabelName = TargetLineName + ".Label";
@@ -12,7 +13,6 @@ public sealed class GridTradingModule : IRobotModule
     private readonly GridStatus _status;
     private bool _closingBasket;
     private double _startingEquity;
-    private double _initialAtrPips;
     private double _highWaterProfit;
     private int _nextLevel = 1;
     private TradeType? _activeDirection;
@@ -26,13 +26,14 @@ public sealed class GridTradingModule : IRobotModule
         _status.Direction = _config.Direction;
         _status.BaseTarget = _config.TargetProfit;
         _status.TrailingLockPercent = _config.TrailingLockPercent;
-        _status.DistanceAmount = _config.DistanceAmount;
+        _status.UseAtrDistance = _config.UseAtrDistance;
         _status.UseAtr = _config.UseAtr;
         _status.AtrPeriod = _config.AtrPeriod;
         _status.MaxDrawdownPercent = _config.MaxDrawdownPercent;
         _status.MaxDrawdownAmount = _config.MaxDrawdownAmount;
         var snapshot = context.GetMarketSnapshot();
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
+        _status.DistanceAmount = GetEffectiveDistance(snapshot);
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
         _status.State = "Waiting for manual position";
@@ -44,6 +45,7 @@ public sealed class GridTradingModule : IRobotModule
         var snapshot = context.GetMarketSnapshot();
         UpdateVolumeInfo(context);
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
+        _status.DistanceAmount = GetEffectiveDistance(snapshot);
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
         if (_closingBasket)
@@ -58,7 +60,6 @@ public sealed class GridTradingModule : IRobotModule
                 if (context.GetChartPositions(direction).Count == 0) continue;
                 _activeDirection = direction;
                 _startingEquity = snapshot.Equity;
-                _initialAtrPips = Math.Max(snapshot.AtrPips, 0.0001);
                 UpdateDrawdownStatus(snapshot);
                 SynchronizePendingOrders(context, snapshot.SymbolName);
                 context.Log($"Grid adopted manual {direction} position.");
@@ -127,7 +128,7 @@ public sealed class GridTradingModule : IRobotModule
 
         var info = context.GetTradeVolumeInfo();
         var margin = _activeDirection!.Value == TradeType.Buy ? info.BuyEstimatedMargin : info.SellEstimatedMargin;
-        var pips = _config.DistanceAmount / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue) * AtrScale(snapshot);
+        var pips = GetEffectiveDistance(snapshot) / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue);
         var positions = context.GetChartPositions(_activeDirection.Value);
         // Keep a single next-level order. Once it fills, the next tick adds the following level.
         // This removes an artificial position cap without flooding the account with pending orders.
@@ -241,7 +242,6 @@ public sealed class GridTradingModule : IRobotModule
         _nextLevel = 1;
         _highWaterProfit = 0;
         _startingEquity = 0;
-        _initialAtrPips = 0;
     }
     private void UpdateChartLines(RobotContext context, MarketSnapshot snapshot, IReadOnlyList<Position> positions)
     {
@@ -290,10 +290,12 @@ public sealed class GridTradingModule : IRobotModule
         context.RemoveChartObject(TargetLabelName);
         context.RemoveChartObject(LockLabelName);
     }
-    private double AtrScale(MarketSnapshot s) => _config.UseAtr ? Math.Max(0.1, s.AtrPips / _initialAtrPips) : 1;
     private double GetEffectiveTarget(MarketSnapshot snapshot) => _config.UseAtr
         ? snapshot.AtrPips * AtrTargetAmountPerPip
         : _config.TargetProfit;
+    private double GetEffectiveDistance(MarketSnapshot snapshot) => _config.UseAtrDistance
+        ? Math.Max(MinimumAtrDistanceAmount, snapshot.AtrPips * AtrTargetAmountPerPip)
+        : _config.DistanceAmount;
     private static int GetLevel(string label)
     {
         var markerIndex = label.LastIndexOf(".L", StringComparison.Ordinal);

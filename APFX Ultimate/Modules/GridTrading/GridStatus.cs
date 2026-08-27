@@ -15,6 +15,7 @@ public sealed class GridStatus
     public double BaseTarget { get; set; }
     public double TrailingLockPercent { get; set; }
     public double DistanceAmount { get; set; }
+    public bool UseAtrDistance { get; set; }
     public bool UseAtr { get; set; }
     public int AtrPeriod { get; set; }
     public double MaxDrawdownPercent { get; set; }

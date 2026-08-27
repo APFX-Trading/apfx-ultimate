@@ -26,6 +26,8 @@ public partial class APFXUltimate : Robot
     public double GridTrailingLockPercent { get; set; }
     [Parameter("Distance", DefaultValue = 15.0, MinValue = 0.01, Group = "Grid")]
     public double GridDistanceAmount { get; set; }
+    [Parameter("Use ATR Distance", DefaultValue = false, Group = "Grid")]
+    public bool GridUseAtrDistance { get; set; }
     [Parameter("Use ATR Scaling", DefaultValue = false, Group = "Grid")]
     public bool GridUseAtr { get; set; }
     [Parameter("ATR Period", DefaultValue = 14, MinValue = 1, Group = "Grid")]
@@ -388,7 +390,7 @@ public partial class APFXUltimate : Robot
         Positions.Closed += OnPositionClosed;
         _modules = new RobotModuleRunner(new IRobotModule[]
         {
-            new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent, GridMaxDrawdownAmount), gridStatus),
+            new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtrDistance, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent, GridMaxDrawdownAmount), gridStatus),
             new TelegramReportingModule(new TelegramReportingConfiguration(TelegramReportingEnabled, TelegramBotToken, TelegramChatId, TelegramUtcOffsetMinutes, TelegramEnableDaily, TelegramDailyHour, TelegramDailyMinute, TelegramEnableWeekly, TelegramWeeklyDay, TelegramWeeklyHour, TelegramWeeklyMinute, TelegramEnableMonthly, TelegramMonthlyDay, TelegramMonthlyHour, TelegramMonthlyMinute, TelegramAlertClosedTrades, TelegramSymbolFilter, TelegramLabelFilter, TelegramReportTitle)),
             new CalendarNewsModule(new CalendarNewsConfiguration(CalendarApiKey, CalendarHoursAhead, CalendarRefreshMinutes, CalendarMinimumImpact), calendarNewsState),
             new CalendarNewsChartOverlayModule(calendarNewsState),
