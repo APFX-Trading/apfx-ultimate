@@ -5,6 +5,7 @@ public partial class APFXUltimate : Robot
 {
     private RobotModuleRunner? _modules;
     private ChartPanelModule? _chartPanelModule;
+    private Action<UserTimeOffsetChangedEventArgs>? _userTimeOffsetChangedHandler;
 
     [Parameter("Position", DefaultValue = PanelPosition.TopRight, Group = "Chart Panel")]
     public PanelPosition ChartPanelPosition { get; set; }
@@ -187,12 +188,14 @@ public partial class APFXUltimate : Robot
         var previousPeriodLevelsOverlay = new PreviousPeriodLevelsOverlayModule(ShowPreviousPeriodLevels);
         var marketPulseLevelsOverlay = new MarketPulseLevelsOverlayModule(Bars, marketPulseAtr, Symbol, MarketPulseSwingLeft, MarketPulseSwingRight, MarketPulseMinimumTests, MarketPulseMaximumLevelsPerSide, MarketPulseMergeAtr, ShowMarketPulseLevels);
         var volumeProfileOverlay = new DailyVolumeProfileOverlayModule(VolumeProfileDays, ShowVolumeProfile);
+        _userTimeOffsetChangedHandler = args => calendarNewsState.RefreshDisplayedTimes(args.UserTimeOffset);
+        Application.UserTimeOffsetChanged += _userTimeOffsetChangedHandler;
         var context = new RobotContext(
             log: message => Print(message),
             getServerTime: () => Server.Time,
             getServerTimeUtc: () => Server.TimeInUtc,
             convertUtcToChartTime: utcTime =>
-                utcTime.Add(Server.Time - Server.TimeInUtc),
+                utcTime.Add(Application.UserTimeOffset),
             getEmaPoints: line =>
             {
                 var values = line == EmaLine.Fast ? fastEma.Result : slowEma.Result;
@@ -397,6 +400,11 @@ public partial class APFXUltimate : Robot
         Positions.Closed -= OnPositionClosed;
         _modules?.Stop();
         _chartPanelModule = null;
+        if (_userTimeOffsetChangedHandler is not null)
+        {
+            Application.UserTimeOffsetChanged -= _userTimeOffsetChangedHandler;
+            _userTimeOffsetChangedHandler = null;
+        }
     }
 
     private double GetTradeVolumeInUnits()
