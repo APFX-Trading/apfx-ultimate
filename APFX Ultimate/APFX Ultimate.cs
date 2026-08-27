@@ -32,6 +32,8 @@ public partial class APFXUltimate : Robot
     public int GridAtrPeriod { get; set; }
     [Parameter("Max Drawdown (%)", DefaultValue = 10.0, MinValue = 0.1, MaxValue = 100, Group = "Grid")]
     public double GridMaxDrawdownPercent { get; set; }
+    [Parameter("Max Drawdown ($)", DefaultValue = 0.0, MinValue = 0, Group = "Grid")]
+    public double GridMaxDrawdownAmount { get; set; }
 
     [Parameter("API Key", DefaultValue = "", Group = "Calendar News")]
     public string CalendarApiKey { get; set; } = string.Empty;
@@ -386,7 +388,7 @@ public partial class APFXUltimate : Robot
         Positions.Closed += OnPositionClosed;
         _modules = new RobotModuleRunner(new IRobotModule[]
         {
-            new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent), gridStatus),
+            new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent, GridMaxDrawdownAmount), gridStatus),
             new TelegramReportingModule(new TelegramReportingConfiguration(TelegramReportingEnabled, TelegramBotToken, TelegramChatId, TelegramUtcOffsetMinutes, TelegramEnableDaily, TelegramDailyHour, TelegramDailyMinute, TelegramEnableWeekly, TelegramWeeklyDay, TelegramWeeklyHour, TelegramWeeklyMinute, TelegramEnableMonthly, TelegramMonthlyDay, TelegramMonthlyHour, TelegramMonthlyMinute, TelegramAlertClosedTrades, TelegramSymbolFilter, TelegramLabelFilter, TelegramReportTitle)),
             new CalendarNewsModule(new CalendarNewsConfiguration(CalendarApiKey, CalendarHoursAhead, CalendarRefreshMinutes, CalendarMinimumImpact), calendarNewsState),
             new CalendarNewsChartOverlayModule(calendarNewsState),

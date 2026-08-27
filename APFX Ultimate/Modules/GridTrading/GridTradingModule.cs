@@ -30,6 +30,7 @@ public sealed class GridTradingModule : IRobotModule
         _status.UseAtr = _config.UseAtr;
         _status.AtrPeriod = _config.AtrPeriod;
         _status.MaxDrawdownPercent = _config.MaxDrawdownPercent;
+        _status.MaxDrawdownAmount = _config.MaxDrawdownAmount;
         var snapshot = context.GetMarketSnapshot();
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
         UpdateDrawdownStatus(snapshot);
@@ -316,16 +317,19 @@ public sealed class GridTradingModule : IRobotModule
         // The baseline is locked when the first manual position is adopted. Until then,
         // show the amount that would be available if a basket started at this moment.
         var referenceEquity = _activeDirection is null ? snapshot.Equity : _startingEquity;
-        var allowedLoss = referenceEquity * _config.MaxDrawdownPercent / 100d;
+        var percentageLimit = referenceEquity * Math.Max(0, _config.MaxDrawdownPercent) / 100d;
+        var allowedLoss = Math.Max(percentageLimit, Math.Max(0, _config.MaxDrawdownAmount));
         _status.CurrentEquity = snapshot.Equity;
         _status.StartingEquity = referenceEquity;
+        _status.PercentageDrawdownLimit = percentageLimit;
+        _status.EffectiveDrawdownLimit = allowedLoss;
         _status.EquityStop = referenceEquity - allowedLoss;
         _status.DrawdownUsed = Math.Max(0, referenceEquity - snapshot.Equity);
         _status.DrawdownRemaining = Math.Max(0, allowedLoss - _status.DrawdownUsed);
         _status.IsBasketActive = _activeDirection is not null;
     }
     private bool HasReachedMaxDrawdown() =>
-        _config.MaxDrawdownPercent > 0 && _status.DrawdownUsed >= _startingEquity * _config.MaxDrawdownPercent / 100d;
+        _status.EffectiveDrawdownLimit > 0 && _status.DrawdownUsed >= _status.EffectiveDrawdownLimit;
     private static IReadOnlyList<Position> GetChartSymbolPositions(RobotContext context) => context
         .GetChartPositions(TradeType.Buy)
         .Concat(context.GetChartPositions(TradeType.Sell))

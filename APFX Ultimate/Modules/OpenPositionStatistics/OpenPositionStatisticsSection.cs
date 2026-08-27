@@ -51,7 +51,7 @@ public sealed class OpenPositionStatisticsSection
         AddRow(grid, "Equity", _gridStatus is null ? 4 : 8);
         if (_gridStatus is not null)
         {
-            AddRow(grid, "Drawdown Left", 9);
+            AddRow(grid, "DD Left / Limit", 9);
         }
         AddRow(grid, "Margin Used", _gridStatus is null ? 5 : 10);
         AddRow(grid, "Margin Free", _gridStatus is null ? 6 : 11);
@@ -90,7 +90,7 @@ public sealed class OpenPositionStatisticsSection
             var configuredTrailAmount = (_gridStatus.EffectiveTarget > 0 ? _gridStatus.EffectiveTarget : _gridStatus.BaseTarget)
                 * _gridStatus.TrailingLockPercent / 100d;
             _valueCells["Trail ($)"].Text = FormatAmount(_gridStatus.TrailingFloor > 0 ? _gridStatus.TrailingFloor : configuredTrailAmount);
-            _valueCells["Drawdown Left"].Text = $"{_gridStatus.DrawdownRemaining:N2} ({_gridStatus.MaxDrawdownPercent:N0}%)";
+            _valueCells["DD Left / Limit"].Text = $"{_gridStatus.DrawdownRemaining:N2} / {_gridStatus.EffectiveDrawdownLimit:N2}";
         }
 
         _nextRefreshAt = context.ServerTime.AddMilliseconds(250);

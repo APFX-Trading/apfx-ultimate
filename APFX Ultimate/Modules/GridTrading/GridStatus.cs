@@ -18,6 +18,9 @@ public sealed class GridStatus
     public bool UseAtr { get; set; }
     public int AtrPeriod { get; set; }
     public double MaxDrawdownPercent { get; set; }
+    public double MaxDrawdownAmount { get; set; }
+    public double PercentageDrawdownLimit { get; set; }
+    public double EffectiveDrawdownLimit { get; set; }
     public double StartingEquity { get; set; }
     public double CurrentEquity { get; set; }
     public double DrawdownUsed { get; set; }
