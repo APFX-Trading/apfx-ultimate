@@ -38,6 +38,22 @@ public sealed class MarketPulseLevelsOverlayModule : IRobotModule
     public string Label => "Strong S/R Levels (time)";
     public bool IsEnabled { get; private set; }
 
+    public StrongLevelsSnapshot GetNearestLevels(double price)
+    {
+        var confirmedLevels = _levels.Where(level => level.Tests >= _minimumTests);
+        var support = confirmedLevels
+            .Where(level => level.Price < price)
+            .OrderByDescending(level => level.Price)
+            .Select(level => (double?)level.Price)
+            .FirstOrDefault();
+        var resistance = confirmedLevels
+            .Where(level => level.Price > price)
+            .OrderBy(level => level.Price)
+            .Select(level => (double?)level.Price)
+            .FirstOrDefault();
+        return new StrongLevelsSnapshot(support, resistance);
+    }
+
     public void OnStart(RobotContext context)
     {
         _context = context;

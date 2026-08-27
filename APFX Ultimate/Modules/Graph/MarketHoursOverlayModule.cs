@@ -59,6 +59,38 @@ public sealed class MarketHoursOverlayModule : IRobotModule
     public bool IsPsychologicalLevelsEnabled { get; private set; }
     public string PsychologicalLevelsLabel => _psychologicalLevelPreset?.Label ?? string.Empty;
 
+    public PsychologicalLevelsSnapshot? GetNearestPsychologicalLevels(double price)
+    {
+        if (_psychologicalLevelPreset is not { } preset)
+        {
+            return null;
+        }
+
+        var below = Math.Floor((price - preset.MinorStep * 0.0001) / preset.MinorStep) * preset.MinorStep;
+        var above = Math.Ceiling((price + preset.MinorStep * 0.0001) / preset.MinorStep) * preset.MinorStep;
+        return new PsychologicalLevelsSnapshot(Math.Round(below, 6), Math.Round(above, 6));
+    }
+
+    public TradingSessionSnapshot? GetCurrentSession(RobotContext context)
+    {
+        var now = context.ServerTime;
+        var definition = SessionDefinitions
+            .Where(candidate => now.TimeOfDay >= candidate.Start && now.TimeOfDay < candidate.End)
+            .OrderByDescending(candidate => candidate.Start)
+            .FirstOrDefault();
+        if (definition is null)
+        {
+            return null;
+        }
+
+        var start = now.Date.Add(definition.Start);
+        var end = now < now.Date.Add(definition.End) ? now : now.Date.Add(definition.End);
+        var range = context.GetChartPriceRange(start, end);
+        return range is null || range.Value.High <= range.Value.Low
+            ? null
+            : new TradingSessionSnapshot(definition.Session.ToString(), range.Value.Low, range.Value.High);
+    }
+
     public void OnStart(RobotContext context)
     {
         _context = context;

@@ -37,6 +37,7 @@ public sealed class RobotContext
     private readonly Func<Position, TradeResult> _closePosition;
     private readonly Func<PendingOrder, TradeResult> _cancelPendingOrder;
     private readonly Func<MarketSnapshot> _getMarketSnapshot;
+    private readonly Func<ChartContextSnapshot> _getChartContextSnapshot;
     private readonly Action<string, double, Color> _drawHorizontalLine;
     private readonly Action<string, double, Color, int, LineStyle> _drawGraphHorizontalLine;
     private readonly Action<string, DateTime, Color, int, LineStyle> _drawGraphVerticalLine;
@@ -81,6 +82,7 @@ public sealed class RobotContext
         Func<Position, TradeResult> closePosition,
         Func<PendingOrder, TradeResult> cancelPendingOrder,
         Func<MarketSnapshot> getMarketSnapshot,
+        Func<ChartContextSnapshot> getChartContextSnapshot,
         Action<string, double, Color> drawHorizontalLine,
         Action<string, double, Color, int, LineStyle> drawGraphHorizontalLine,
         Action<string, DateTime, Color, int, LineStyle> drawGraphVerticalLine,
@@ -124,6 +126,7 @@ public sealed class RobotContext
         _closePosition = closePosition ?? throw new ArgumentNullException(nameof(closePosition));
         _cancelPendingOrder = cancelPendingOrder ?? throw new ArgumentNullException(nameof(cancelPendingOrder));
         _getMarketSnapshot = getMarketSnapshot ?? throw new ArgumentNullException(nameof(getMarketSnapshot));
+        _getChartContextSnapshot = getChartContextSnapshot ?? throw new ArgumentNullException(nameof(getChartContextSnapshot));
         _drawHorizontalLine = drawHorizontalLine ?? throw new ArgumentNullException(nameof(drawHorizontalLine));
         _drawGraphHorizontalLine = drawGraphHorizontalLine ?? throw new ArgumentNullException(nameof(drawGraphHorizontalLine));
         _drawGraphVerticalLine = drawGraphVerticalLine ?? throw new ArgumentNullException(nameof(drawGraphVerticalLine));
@@ -177,6 +180,7 @@ public sealed class RobotContext
     public TradeResult ClosePosition(Position position) => _closePosition(position);
     public TradeResult CancelPendingOrder(PendingOrder order) => _cancelPendingOrder(order);
     public MarketSnapshot GetMarketSnapshot() => _getMarketSnapshot();
+    public ChartContextSnapshot GetChartContextSnapshot() => _getChartContextSnapshot();
     public void DrawHorizontalLine(string name, double price, Color color) => _drawHorizontalLine(name, price, color);
     public void DrawGraphHorizontalLine(string name, double price, Color color, int thickness, LineStyle lineStyle) => _drawGraphHorizontalLine(name, price, color, thickness, lineStyle);
     public void DrawGraphVerticalLine(string name, DateTime time, Color color, int thickness, LineStyle lineStyle) => _drawGraphVerticalLine(name, time, color, thickness, lineStyle);

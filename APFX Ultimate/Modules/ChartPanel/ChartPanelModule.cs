@@ -20,6 +20,7 @@ public sealed class ChartPanelModule : IRobotModule
     private Border? _panel;
     private AccountStatisticsSection? _accountStatistics;
     private OpenPositionStatisticsSection? _openPositionStatistics;
+    private ChartContextSection? _chartContext;
     private TradingControlsSection? _tradingControls;
     private IndicatorStatusSection? _indicatorStatus;
     private CalendarNewsSection? _calendarNews;
@@ -51,21 +52,25 @@ public sealed class ChartPanelModule : IRobotModule
         var layoutGrid = new Grid(2, 2);
         layoutGrid.Columns[0].SetWidthInStars(1);
         layoutGrid.Columns[1].SetWidthInStars(1.5);
-        var primaryColumn = new Grid(2, 1);
+        var primaryColumn = new Grid(3, 1);
         primaryColumn.Rows[0].SetHeightToAuto();
         primaryColumn.Rows[1].SetHeightToAuto();
+        primaryColumn.Rows[2].SetHeightToAuto();
 
         _accountStatistics = new AccountStatisticsSection();
         _accountStatistics.TrackDrawdown(context);
         _openPositionStatistics = new OpenPositionStatisticsSection(_fontSize, _gridStatus);
+        _chartContext = new ChartContextSection(_fontSize, _marketHoursOverlay, _marketPulseLevelsOverlay);
         _tradingControls = new TradingControlsSection(_fontSize, () => RefreshAccountData(context));
         _indicatorStatus = new IndicatorStatusSection(_fontSize, _atrPeriod);
         _calendarNews = new CalendarNewsSection(_fontSize, _calendarNewsState);
         _graphControls = new GraphControlsSection(_fontSize, _marketHoursOverlay, _emaOverlay, _bollingerBandsOverlay, _dailyVwapOverlay, _previousPeriodLevelsOverlay, _marketPulseLevelsOverlay, _volumeProfileOverlay);
         var liveStatusSection = ChartPanelLayout.CreateSection(_openPositionStatistics.CreateControl(context));
+        var chartContextSection = ChartPanelLayout.CreateSection(_chartContext.CreateControl(context));
         var performanceSection = ChartPanelLayout.CreateSection(_accountStatistics.CreateControl(context, _fontSize));
         primaryColumn.AddChild(liveStatusSection, 0, 0);
-        primaryColumn.AddChild(performanceSection, 1, 0);
+        primaryColumn.AddChild(chartContextSection, 1, 0);
+        primaryColumn.AddChild(performanceSection, 2, 0);
 
         var rightColumn = new Grid(3, 1);
         rightColumn.Rows[0].SetHeightToAuto();
@@ -97,11 +102,16 @@ public sealed class ChartPanelModule : IRobotModule
         _accountStatistics?.TrackDrawdown(context);
         _accountStatistics?.RefreshIfDue(context);
         _openPositionStatistics?.RefreshIfDue(context);
+        _chartContext?.RefreshIfDue(context);
         _indicatorStatus?.RefreshIfDue(context);
         _calendarNews?.Refresh(context);
     }
 
-    public void OnTimer(RobotContext context) => _calendarNews?.Refresh(context);
+    public void OnTimer(RobotContext context)
+    {
+        _calendarNews?.Refresh(context);
+        _chartContext?.RefreshIfDue(context);
+    }
 
     public void OnStop(RobotContext context)
     {
@@ -114,6 +124,7 @@ public sealed class ChartPanelModule : IRobotModule
         _panel = null;
         _accountStatistics = null;
         _openPositionStatistics = null;
+        _chartContext = null;
         _tradingControls = null;
         _indicatorStatus = null;
         _calendarNews = null;

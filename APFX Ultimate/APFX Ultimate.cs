@@ -7,10 +7,10 @@ public partial class APFXUltimate : Robot
     private ChartPanelModule? _chartPanelModule;
     private Action<UserTimeOffsetChangedEventArgs>? _userTimeOffsetChangedHandler;
 
-    [Parameter("Position", DefaultValue = PanelPosition.TopRight, Group = "Chart Panel")]
+    [Parameter("Position", DefaultValue = PanelPosition.CenterLeft, Group = "Chart Panel")]
     public PanelPosition ChartPanelPosition { get; set; }
 
-    [Parameter("Font Size", DefaultValue = 13.0, MinValue = 10, MaxValue = 24, Step = 1, Group = "Chart Panel")]
+    [Parameter("Font Size", DefaultValue = 11.0, MinValue = 10, MaxValue = 24, Step = 1, Group = "Chart Panel")]
     public double ChartPanelFontSize { get; set; }
 
     [Parameter("Volume (Lots)", DefaultValue = 1.0, MinValue = 0.01, MaxValue = 1000, Step = 0.01, Group = "Trading")]
@@ -292,7 +292,27 @@ public partial class APFXUltimate : Robot
             placeGridLimit: (direction, price, label) => PlaceLimitOrder(direction, SymbolName, GetTradeVolumeInUnits(), price, label),
             closePosition: position => ClosePosition(position),
             cancelPendingOrder: order => CancelPendingOrder(order),
-            getMarketSnapshot: () => new MarketSnapshot(SymbolName, Symbol.Bid, Symbol.Ask, Symbol.PipSize, Symbol.PipValue, Account.Equity, Account.FreeMargin, gridAtr.Result.LastValue / Symbol.PipSize, directionalMovement.ADX.LastValue, directionalMovement.DIPlus.LastValue, directionalMovement.DIMinus.LastValue, rsiM1.Result.LastValue, rsiM5.Result.LastValue, rsiM15.Result.LastValue, rsiH1.Result.LastValue, rsiH4.Result.LastValue, bollingerBands.Top.LastValue, bollingerBands.Bottom.LastValue),
+            getMarketSnapshot: () => new MarketSnapshot(SymbolName, Symbol.Bid, Symbol.Ask, Symbol.PipSize, Symbol.PipValue, Account.Equity, Account.FreeMargin, gridAtr.Result.LastValue / Symbol.PipSize, directionalMovement.ADX.LastValue, directionalMovement.DIPlus.LastValue, directionalMovement.DIMinus.LastValue, rsiM1.Result.LastValue, rsiM5.Result.LastValue, rsiM15.Result.LastValue, rsiH1.Result.LastValue, rsiH4.Result.LastValue, bollingerBands.Top.LastValue, bollingerBands.Bottom.LastValue, fastEma.Result.LastValue, slowEma.Result.LastValue),
+            getChartContextSnapshot: () =>
+            {
+                if (dailyBars.Count == 0 || Bars.Count == 0)
+                {
+                    return default;
+                }
+
+                var dailyIndex = dailyBars.Count - 1;
+                var barIndex = Bars.Count - 1;
+                var currentBarOpenTime = Bars.OpenTimes[barIndex];
+                var barDuration = barIndex > 0 ? currentBarOpenTime - Bars.OpenTimes[barIndex - 1] : TimeSpan.Zero;
+                return new ChartContextSnapshot(
+                    SymbolName,
+                    TimeFrame.ToString(),
+                    dailyBars.OpenPrices[dailyIndex],
+                    dailyBars.HighPrices[dailyIndex],
+                    dailyBars.LowPrices[dailyIndex],
+                    currentBarOpenTime,
+                    barDuration);
+            },
             drawHorizontalLine: (name, price, color) => Chart.DrawHorizontalLine(name, price, color, 2, LineStyle.Dots),
             drawGraphHorizontalLine: (name, price, color, thickness, lineStyle) => Chart.DrawHorizontalLine(name, price, color, thickness, lineStyle),
             drawGraphVerticalLine: (name, time, color, thickness, lineStyle) => Chart.DrawVerticalLine(name, time, color, thickness, lineStyle),

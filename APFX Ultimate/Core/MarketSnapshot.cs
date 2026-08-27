@@ -21,4 +21,6 @@ public readonly record struct MarketSnapshot(
     double RsiH1,
     double RsiH4,
     double BollingerTop,
-    double BollingerBottom);
+    double BollingerBottom,
+    double FastEma,
+    double SlowEma);
