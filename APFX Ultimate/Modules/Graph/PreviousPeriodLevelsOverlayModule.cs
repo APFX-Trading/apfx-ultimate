@@ -4,6 +4,7 @@ namespace cAlgo.Robots;
 public sealed class PreviousPeriodLevelsOverlayModule : IRobotModule
 {
     private const string ObjectPrefix = "APFXUltimate.Graph.PreviousLevels.";
+    private const double LabelCollisionViewportFraction = 0.03;
     private readonly HashSet<string> _objectNames = new(StringComparer.Ordinal);
     private RobotContext? _context;
 
@@ -41,31 +42,72 @@ public sealed class PreviousPeriodLevelsOverlayModule : IRobotModule
             return;
         }
 
+        var displayLevels = new[]
+        {
+            new DisplayLevel("Day.High", "Previous Day High", levels.PreviousDay.High, GraphColorPalette.PreviousDayHigh, LineStyle.Dots),
+            new DisplayLevel("Day.Low", "Previous Day Low", levels.PreviousDay.Low, GraphColorPalette.PreviousDayLow, LineStyle.Dots),
+            new DisplayLevel("Day.Close", "Previous Day Close", levels.PreviousDay.Close, GraphColorPalette.PreviousDayClose, LineStyle.Dots),
+            new DisplayLevel("Week.High", "Previous Week High", levels.PreviousWeek.High, GraphColorPalette.PreviousWeekHigh, LineStyle.Solid),
+            new DisplayLevel("Week.Low", "Previous Week Low", levels.PreviousWeek.Low, GraphColorPalette.PreviousWeekLow, LineStyle.Solid),
+            new DisplayLevel("Week.Close", "Previous Week Close", levels.PreviousWeek.Close, GraphColorPalette.PreviousWeekClose, LineStyle.Solid),
+        };
+        var labelTimes = GetLabelTimes(displayLevels);
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
-        Draw("Day.High", "Previous Day High", levels.PreviousDay.High, GraphColorPalette.PreviousDayHigh, LineStyle.Dots, activeNames);
-        Draw("Day.Low", "Previous Day Low", levels.PreviousDay.Low, GraphColorPalette.PreviousDayLow, LineStyle.Dots, activeNames);
-        Draw("Day.Close", "Previous Day Close", levels.PreviousDay.Close, GraphColorPalette.PreviousDayClose, LineStyle.Dots, activeNames);
-        Draw("Week.High", "Previous Week High", levels.PreviousWeek.High, GraphColorPalette.PreviousWeekHigh, LineStyle.Solid, activeNames);
-        Draw("Week.Low", "Previous Week Low", levels.PreviousWeek.Low, GraphColorPalette.PreviousWeekLow, LineStyle.Solid, activeNames);
-        Draw("Week.Close", "Previous Week Close", levels.PreviousWeek.Close, GraphColorPalette.PreviousWeekClose, LineStyle.Solid, activeNames);
+        foreach (var level in displayLevels)
+        {
+            Draw(level, labelTimes[level.Key], activeNames);
+        }
         RemoveStaleObjects(activeNames);
     }
 
-    private void Draw(string key, string label, double price, Color color, LineStyle lineStyle, HashSet<string> activeNames)
+    private void Draw(DisplayLevel level, DateTime labelTime, HashSet<string> activeNames)
     {
-        var name = ObjectPrefix + key;
-        _context!.DrawGraphHorizontalLine(name, price, color, 1, lineStyle);
+        var name = ObjectPrefix + level.Key;
+        _context!.DrawGraphHorizontalLine(name, level.Price, level.Color, 1, level.LineStyle);
         activeNames.Add(name);
         var labelName = name + ".Label";
-        _context.DrawChartText(labelName, label, GetLabelTime(), price, color);
+        _context.DrawChartText(labelName, level.Label, labelTime, level.Price, level.Color);
         activeNames.Add(labelName);
     }
 
-    private DateTime GetLabelTime()
+    private Dictionary<string, DateTime> GetLabelTimes(IReadOnlyList<DisplayLevel> levels)
     {
         var viewport = _context!.GetChartViewport();
-        return viewport.StartTime.AddTicks((viewport.EndTime - viewport.StartTime).Ticks / 2);
+        var duration = viewport.EndTime - viewport.StartTime;
+        var midpoint = viewport.StartTime.AddTicks(duration.Ticks / 2);
+        var collisionThreshold = Math.Max(0, viewport.TopPrice - viewport.BottomPrice) * LabelCollisionViewportFraction;
+        var labelTimes = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+
+        var orderedLevels = levels.OrderBy(level => level.Price).ThenBy(level => level.Key, StringComparer.Ordinal).ToArray();
+        for (var start = 0; start < orderedLevels.Length;)
+        {
+            var end = start + 1;
+            while (end < orderedLevels.Length && Math.Abs(orderedLevels[end].Price - orderedLevels[end - 1].Price) <= collisionThreshold)
+            {
+                end++;
+            }
+
+            var groupCount = end - start;
+            if (groupCount == 1)
+            {
+                labelTimes[orderedLevels[start].Key] = midpoint;
+            }
+            else
+            {
+                for (var index = 0; index < groupCount; index++)
+                {
+                    var fraction = 0.25 + 0.5 * index / (groupCount - 1d);
+                    labelTimes[orderedLevels[start + index].Key] = viewport.StartTime.AddTicks((long)(duration.Ticks * fraction));
+                }
+            }
+
+            start = end;
+        }
+
+        return labelTimes;
     }
+
+    private readonly record struct DisplayLevel(string Key, string Label, double Price, Color Color, LineStyle LineStyle);
 
     private void RemoveStaleObjects(HashSet<string> activeNames)
     {

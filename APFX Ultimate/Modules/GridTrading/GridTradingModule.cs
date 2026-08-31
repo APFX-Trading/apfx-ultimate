@@ -5,6 +5,7 @@ public sealed class GridTradingModule : IRobotModule
 {
     private const double AtrTargetAmountPerPip = 0.10;
     private const double MinimumAtrDistanceAmount = 15.0;
+    private const double MaximumAtrDistanceAmount = 30.0;
     private const string TargetLineName = "APFXUltimate.Target";
     private const string LockLineName = "APFXUltimate.Lock";
     private const string TargetLabelName = TargetLineName + ".Label";
@@ -294,8 +295,8 @@ public sealed class GridTradingModule : IRobotModule
         ? snapshot.AtrPips * AtrTargetAmountPerPip
         : _config.TargetProfit;
     private double GetEffectiveDistance(MarketSnapshot snapshot) => _config.UseAtrDistance
-        ? Math.Max(MinimumAtrDistanceAmount, snapshot.AtrPips * AtrTargetAmountPerPip)
-        : _config.DistanceAmount;
+        ? Math.Clamp(snapshot.AtrPips * AtrTargetAmountPerPip, MinimumAtrDistanceAmount, MaximumAtrDistanceAmount)
+        : Math.Clamp(_config.DistanceAmount, MinimumAtrDistanceAmount, MaximumAtrDistanceAmount);
     private static int GetLevel(string label)
     {
         var markerIndex = label.LastIndexOf(".L", StringComparison.Ordinal);

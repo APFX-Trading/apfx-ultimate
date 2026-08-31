@@ -213,10 +213,9 @@ public sealed class MarketPulseLevelsOverlayModule : IRobotModule
             var lineEndTime = _context.ServerTime > level.CreatedAt ? _context.ServerTime : viewport.EndTime;
             _context.DrawChartTrendLine(key, level.CreatedAt, level.Price, lineEndTime, level.Price, color, 2);
             activeNames.Add(key);
-            var labelTime = level.CreatedAt > midpoint ? level.CreatedAt : midpoint;
             var labelName = key + ".Label";
             var role = isResistance ? "Strong Resistance" : "Strong Support";
-            _context.DrawChartText(labelName, $"{role} x{level.Tests}", labelTime, level.Price, color);
+            _context.DrawChartText(labelName, $"{role} x{level.Tests}", midpoint, level.Price, color);
             activeNames.Add(labelName);
         }
 

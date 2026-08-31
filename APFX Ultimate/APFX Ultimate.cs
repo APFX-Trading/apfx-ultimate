@@ -24,7 +24,7 @@ public partial class APFXUltimate : Robot
     public double GridTargetProfit { get; set; }
     [Parameter("Trailing Lock (%)", DefaultValue = 80.0, MinValue = 1, MaxValue = 100, Group = "Grid")]
     public double GridTrailingLockPercent { get; set; }
-    [Parameter("Distance", DefaultValue = 15.0, MinValue = 0.01, Group = "Grid")]
+    [Parameter("Distance", DefaultValue = 15.0, MinValue = 15.0, MaxValue = 30.0, Group = "Grid")]
     public double GridDistanceAmount { get; set; }
     [Parameter("Use ATR Distance", DefaultValue = false, Group = "Grid")]
     public bool GridUseAtrDistance { get; set; }
