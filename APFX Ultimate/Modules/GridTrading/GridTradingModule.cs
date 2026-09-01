@@ -6,6 +6,7 @@ public sealed class GridTradingModule : IRobotModule
     private const double AtrTargetAmountPerPip = 0.10;
     private const double MinimumAtrDistanceAmount = 15.0;
     private const double MaximumAtrDistanceAmount = 30.0;
+    private const string BasketEquityStoragePrefix = "APFXUltimateGridBasketEquityV2";
     private const string TargetLineName = "APFXUltimate.Target";
     private const string LockLineName = "APFXUltimate.Lock";
     private const string TargetLabelName = TargetLineName + ".Label";
@@ -17,6 +18,9 @@ public sealed class GridTradingModule : IRobotModule
     private double _highWaterProfit;
     private int _nextLevel = 1;
     private TradeType? _activeDirection;
+    private DateTime _nextVolumeProfileRefreshAt = DateTime.MinValue;
+    private DailyVolumeProfile? _currentVolumeProfile;
+    private bool _insufficientMarginLogged;
 
     public GridTradingModule(GridConfiguration config, GridStatus status) { _config = config; _status = status; }
     public string Name => nameof(GridTradingModule);
@@ -35,6 +39,7 @@ public sealed class GridTradingModule : IRobotModule
         var snapshot = context.GetMarketSnapshot();
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
         _status.DistanceAmount = GetEffectiveDistance(snapshot);
+        UpdateVolumeProfileStatus(context, snapshot);
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
         _status.State = "Waiting for manual position";
@@ -47,6 +52,7 @@ public sealed class GridTradingModule : IRobotModule
         UpdateVolumeInfo(context);
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
         _status.DistanceAmount = GetEffectiveDistance(snapshot);
+        UpdateVolumeProfileStatus(context, snapshot);
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
         if (_closingBasket)
@@ -58,9 +64,10 @@ public sealed class GridTradingModule : IRobotModule
         {
             foreach (var direction in GetAllowedDirections())
             {
-                if (context.GetChartPositions(direction).Count == 0) continue;
+                var adoptedPositions = context.GetChartPositions(direction);
+                if (adoptedPositions.Count == 0) continue;
                 _activeDirection = direction;
-                _startingEquity = snapshot.Equity;
+                _startingEquity = LoadOrCreateBasketStartingEquity(context, snapshot, direction, adoptedPositions);
                 UpdateDrawdownStatus(snapshot);
                 SynchronizePendingOrders(context, snapshot.SymbolName);
                 context.Log($"Grid adopted manual {direction} position.");
@@ -141,12 +148,23 @@ public sealed class GridTradingModule : IRobotModule
         var direction = _activeDirection.Value;
         var spacing = pips * snapshot.PipSize;
         var price = GetNextPendingPrice(direction, positions, spacing);
+        _status.PendingOrderNearHighVolumeNode = IsNearHighVolumeNode(price);
+        if (_status.PendingOrderNearHighVolumeNode)
+        {
+            context.Log($"Grid level {_nextLevel} is near a high-volume profile node.");
+        }
 
         if (snapshot.FreeMargin < margin)
         {
-            context.Log($"Grid stopped at level {_nextLevel}: insufficient free margin.");
+            if (!_insufficientMarginLogged)
+            {
+                context.Log($"Grid stopped at level {_nextLevel}: insufficient free margin.");
+                _insufficientMarginLogged = true;
+            }
             return;
         }
+
+        _insufficientMarginLogged = false;
 
         // If a fast adverse move has already crossed the next grid level, the limit
         // price is invalid. Enter just this missed level at market and wait for the
@@ -202,6 +220,7 @@ public sealed class GridTradingModule : IRobotModule
         ClearChartLines(context);
         foreach (var p in positions) context.ClosePosition(p);
         CancelBasketPendingOrders(context, context.GetMarketSnapshot().SymbolName);
+        ClearBasketStartingEquity(context, context.GetMarketSnapshot().SymbolName);
         context.Log($"Grid closing: {reason}.");
     }
     private void FinishClosingBasket(RobotContext context, MarketSnapshot snapshot)
@@ -244,6 +263,33 @@ public sealed class GridTradingModule : IRobotModule
         _highWaterProfit = 0;
         _startingEquity = 0;
     }
+
+    private double LoadOrCreateBasketStartingEquity(RobotContext context, MarketSnapshot snapshot, TradeType direction, IReadOnlyList<Position> positions)
+    {
+        var storageKey = GetBasketEquityStorageKey(snapshot.SymbolName, direction);
+        if (double.TryParse(context.GetLocalValue(storageKey), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var storedEquity)
+            && storedEquity > 0)
+        {
+            return storedEquity;
+        }
+
+        var inferredStartingEquity = snapshot.Equity - positions.Sum(position => position.NetProfit);
+        var startingEquity = inferredStartingEquity > 0 ? inferredStartingEquity : snapshot.Equity;
+        context.SetLocalValue(storageKey, startingEquity.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+        context.FlushLocalValues();
+        return startingEquity;
+    }
+
+    private void ClearBasketStartingEquity(RobotContext context, string symbolName)
+    {
+        context.SetLocalValue(GetBasketEquityStorageKey(symbolName, TradeType.Buy), "0");
+        context.SetLocalValue(GetBasketEquityStorageKey(symbolName, TradeType.Sell), "0");
+        context.FlushLocalValues();
+    }
+
+    private static string GetBasketEquityStorageKey(string symbolName, TradeType direction) => BasketEquityStoragePrefix
+        + new string(symbolName.Where(char.IsLetterOrDigit).ToArray())
+        + direction;
     private void UpdateChartLines(RobotContext context, MarketSnapshot snapshot, IReadOnlyList<Position> positions)
     {
         var totalVolume = positions.Sum(position => position.VolumeInUnits);
@@ -297,6 +343,30 @@ public sealed class GridTradingModule : IRobotModule
     private double GetEffectiveDistance(MarketSnapshot snapshot) => _config.UseAtrDistance
         ? Math.Clamp(snapshot.AtrPips * AtrTargetAmountPerPip, MinimumAtrDistanceAmount, MaximumAtrDistanceAmount)
         : Math.Clamp(_config.DistanceAmount, MinimumAtrDistanceAmount, MaximumAtrDistanceAmount);
+    private void UpdateVolumeProfileStatus(RobotContext context, MarketSnapshot snapshot)
+    {
+        if (context.ServerTime >= _nextVolumeProfileRefreshAt)
+        {
+            _currentVolumeProfile = context.GetDailyVolumeProfiles(1, 1).LastOrDefault();
+            _nextVolumeProfileRefreshAt = context.ServerTime.AddMinutes(1);
+        }
+
+        if (_currentVolumeProfile is not { } profile || profile.Volumes is null || profile.Volumes.Count == 0)
+        {
+            _status.NearestProfileLevelDistancePips = 0;
+            return;
+        }
+
+        var currentPrice = (snapshot.Bid + snapshot.Ask) / 2d;
+        _status.NearestProfileLevelDistancePips = new[] { profile.PointOfControlPrice, profile.ValueAreaHigh, profile.ValueAreaLow }
+            .Min(level => Math.Abs(level - currentPrice) / snapshot.PipSize);
+    }
+    private bool IsNearHighVolumeNode(double price)
+    {
+        return _currentVolumeProfile is { } profile
+            && profile.Volumes is not null
+            && profile.HighVolumeNodeIndices.Any(index => Math.Abs(profile.GetBinMidpoint(index) - price) <= profile.RowHeight);
+    }
     private static int GetLevel(string label)
     {
         var markerIndex = label.LastIndexOf(".L", StringComparison.Ordinal);

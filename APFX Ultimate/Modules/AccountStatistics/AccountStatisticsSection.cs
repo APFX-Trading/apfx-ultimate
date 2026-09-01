@@ -5,6 +5,7 @@ namespace cAlgo.Robots;
 /// </summary>
 public sealed class AccountStatisticsSection
 {
+    private const string DailyDrawdownStoragePrefix = "APFXUltimateDailyDrawdown";
     private static readonly StatisticsPeriod[] Periods =
     {
         new("Today", now => now.Date),
@@ -22,6 +23,10 @@ public sealed class AccountStatisticsSection
     private DateTime _nextRefreshAt = DateTime.MinValue;
     private DateTime _lastStatisticsDate = DateTime.MinValue;
     private int _lastHistoricalTradeCount = -1;
+    private PersistedDailyDrawdown? _dailyDrawdown;
+    private DateTime _dailyDrawdownDate = DateTime.MinValue;
+    private DateTime _nextDailyDrawdownFlushAt = DateTime.MinValue;
+    private bool _dailyDrawdownStorageUnavailable;
 
     public ControlBase CreateControl(RobotContext context, double fontSize)
     {
@@ -120,6 +125,7 @@ public sealed class AccountStatisticsSection
     {
         var now = context.ServerTime;
         var equity = context.GetAccountEquity();
+        TrackPersistedDailyDrawdown(context, now, equity);
         foreach (var period in Periods)
         {
             var periodStart = period.StartAt(now);
@@ -133,8 +139,23 @@ public sealed class AccountStatisticsSection
         }
     }
 
+    public void FlushDrawdownState(RobotContext context)
+    {
+        if (_dailyDrawdown is null || _dailyDrawdownDate == DateTime.MinValue || _dailyDrawdownStorageUnavailable)
+        {
+            return;
+        }
+
+        PersistDailyDrawdown(context);
+    }
+
     private (double Amount, double PeakBalance) GetDrawdown(StatisticsPeriod period, StatisticsSummary summary)
     {
+        if (period.Name == "Today" && _dailyDrawdown is { } persisted && persisted.MaximumDrawdown > summary.MaximumDrawdown)
+        {
+            return (persisted.MaximumDrawdown, persisted.PeakEquity);
+        }
+
         if (!_tickDrawdownWindows.TryGetValue(period.Name, out var tickDrawdown) || tickDrawdown.MaximumDrawdown <= summary.MaximumDrawdown)
         {
             return (summary.MaximumDrawdown, summary.PeakBalance);
@@ -142,6 +163,89 @@ public sealed class AccountStatisticsSection
 
         return (tickDrawdown.MaximumDrawdown, tickDrawdown.PeakEquity);
     }
+
+    private void TrackPersistedDailyDrawdown(RobotContext context, DateTime now, double equity)
+    {
+        if (_dailyDrawdownDate != now.Date || _dailyDrawdown is null)
+        {
+            FlushDrawdownState(context);
+            _dailyDrawdownDate = now.Date;
+            _dailyDrawdown = LoadDailyDrawdown(context, now.Date, equity);
+            _nextDailyDrawdownFlushAt = now;
+        }
+
+        var drawdown = _dailyDrawdown!.Value;
+        var peakChanged = equity > drawdown.PeakEquity;
+        if (peakChanged)
+        {
+            drawdown = drawdown with { PeakEquity = equity };
+        }
+
+        var maximumDrawdown = Math.Max(drawdown.MaximumDrawdown, drawdown.PeakEquity - equity);
+        var newMaximumDrawdown = maximumDrawdown > drawdown.MaximumDrawdown;
+        if (newMaximumDrawdown)
+        {
+            drawdown = drawdown with { MaximumDrawdown = maximumDrawdown };
+        }
+
+        _dailyDrawdown = drawdown;
+        if (newMaximumDrawdown || now >= _nextDailyDrawdownFlushAt)
+        {
+            PersistDailyDrawdown(context);
+            _nextDailyDrawdownFlushAt = now.AddMinutes(1);
+        }
+    }
+
+    private PersistedDailyDrawdown LoadDailyDrawdown(RobotContext context, DateTime date, double equity)
+    {
+        try
+        {
+            var value = context.GetLocalValue(GetDailyDrawdownStorageKey(date));
+            if (value is not null)
+            {
+                var parts = value.Split('|');
+                if (parts.Length == 2
+                    && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var peakEquity)
+                    && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var maximumDrawdown)
+                    && peakEquity > 0
+                    && maximumDrawdown >= 0)
+                {
+                    return new PersistedDailyDrawdown(Math.Max(peakEquity, equity), maximumDrawdown);
+                }
+            }
+        }
+        catch (ArgumentException)
+        {
+            _dailyDrawdownStorageUnavailable = true;
+            context.Log("Daily drawdown persistence is unavailable; continuing with in-memory tracking.");
+        }
+
+        return new PersistedDailyDrawdown(equity, 0);
+    }
+
+    private void PersistDailyDrawdown(RobotContext context)
+    {
+        if (_dailyDrawdownStorageUnavailable)
+        {
+            return;
+        }
+
+        var value = _dailyDrawdown!.Value;
+        try
+        {
+            context.SetLocalValue(
+                GetDailyDrawdownStorageKey(_dailyDrawdownDate),
+                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.PeakEquity:R}|{value.MaximumDrawdown:R}"));
+            context.FlushLocalValues();
+        }
+        catch (ArgumentException)
+        {
+            _dailyDrawdownStorageUnavailable = true;
+            context.Log("Daily drawdown persistence is unavailable; continuing with in-memory tracking.");
+        }
+    }
+
+    private static string GetDailyDrawdownStorageKey(DateTime date) => DailyDrawdownStoragePrefix + date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
 
     private static TextBlock AddCell(Grid grid, string text, int row, int column, bool isHeader, double fontSize)
     {
@@ -251,6 +355,7 @@ public sealed class AccountStatisticsSection
     private sealed record StatisticsPeriod(string Name, Func<DateTime, DateTime> StartAt);
 
     private readonly record struct StatisticsSummary(int Wins, int Losses, double NetProfit, double StartingBalance, double MaximumDrawdown, double PeakBalance);
+    private readonly record struct PersistedDailyDrawdown(double PeakEquity, double MaximumDrawdown);
 
     private sealed class TickDrawdownWindow
     {

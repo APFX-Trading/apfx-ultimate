@@ -32,7 +32,7 @@ public sealed class OpenPositionStatisticsSection
             HorizontalAlignment = HorizontalAlignment.Center
         });
 
-        var rowCount = _gridStatus is null ? 7 : 12;
+        var rowCount = _gridStatus is null ? 7 : 13;
         var grid = new Grid(rowCount, 2)
         {
             Margin = new Thickness(0, 4, 0, 0)
@@ -47,14 +47,15 @@ public sealed class OpenPositionStatisticsSection
             AddRow(grid, "Trail Lock", 5);
             AddRow(grid, "Trail ($)", 6);
             AddRow(grid, "Distance ($)", 7);
+            AddRow(grid, "Profile POC/VA", 8);
         }
-        AddRow(grid, "Equity", _gridStatus is null ? 4 : 8);
+        AddRow(grid, "Equity", _gridStatus is null ? 4 : 9);
         if (_gridStatus is not null)
         {
-            AddRow(grid, "DD Left / Limit", 9);
+            AddRow(grid, "DD Left / Limit", 10);
         }
-        AddRow(grid, "Margin Used", _gridStatus is null ? 5 : 10);
-        AddRow(grid, "Margin Free", _gridStatus is null ? 6 : 11);
+        AddRow(grid, "Margin Used", _gridStatus is null ? 5 : 11);
+        AddRow(grid, "Margin Free", _gridStatus is null ? 6 : 12);
 
         section.AddChild(grid);
         Refresh(context);
@@ -86,6 +87,7 @@ public sealed class OpenPositionStatisticsSection
         {
             _valueCells["Target ($)"].Text = FormatAmount(_gridStatus.EffectiveTarget > 0 ? _gridStatus.EffectiveTarget : _gridStatus.BaseTarget);
             _valueCells["Distance ($)"].Text = FormatAmount(_gridStatus.DistanceAmount);
+            _valueCells["Profile POC/VA"].Text = $"{_gridStatus.NearestProfileLevelDistancePips:N1} pips{(_gridStatus.PendingOrderNearHighVolumeNode ? " • HVN" : string.Empty)}";
             _valueCells["Trail Lock"].Text = _gridStatus.TrailingLockPercent.ToString("N0") + "%";
             var configuredTrailAmount = (_gridStatus.EffectiveTarget > 0 ? _gridStatus.EffectiveTarget : _gridStatus.BaseTarget)
                 * _gridStatus.TrailingLockPercent / 100d;

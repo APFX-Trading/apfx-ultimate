@@ -163,8 +163,28 @@ public partial class APFXUltimate : Robot
     [Parameter("Volume Profile Days", DefaultValue = 7, MinValue = 1, MaxValue = 30, Group = "Graph")]
     public int VolumeProfileDays { get; set; }
 
+    [Parameter("Profile Bin Size (Pips)", DefaultValue = 5.0, MinValue = 0.1, MaxValue = 100, Step = 0.1, Group = "Volume Profile")]
+    public double VolumeProfileBinSizePips { get; set; }
+    [Parameter("Value Area (%)", DefaultValue = 70.0, MinValue = 50, MaxValue = 95, Group = "Volume Profile")]
+    public double VolumeProfileValueAreaPercent { get; set; }
+    [Parameter("Show Histogram", DefaultValue = true, Group = "Volume Profile")]
+    public bool ShowVolumeProfileHistogram { get; set; }
+    [Parameter("Show POC", DefaultValue = true, Group = "Volume Profile")]
+    public bool ShowVolumeProfilePoc { get; set; }
+    [Parameter("Show Value Area", DefaultValue = true, Group = "Volume Profile")]
+    public bool ShowVolumeProfileValueArea { get; set; }
+    [Parameter("Show HVN / LVN", DefaultValue = true, Group = "Volume Profile")]
+    public bool ShowVolumeProfileNodes { get; set; }
+    [Parameter("Show London / New York", DefaultValue = true, Group = "Volume Profile")]
+    public bool ShowVolumeProfileSessions { get; set; }
+    [Parameter("Show 5D Composite", DefaultValue = true, Group = "Volume Profile")]
+    public bool ShowVolumeProfileComposite { get; set; }
+
     [Parameter("Show Volume Profile", DefaultValue = false, Group = "Graph")]
     public bool ShowVolumeProfile { get; set; }
+
+    [Parameter("Show Commodity Variation", DefaultValue = true, Group = "Graph")]
+    public bool ShowOilVariation { get; set; }
 
     protected override void OnStart()
     {
@@ -191,7 +211,9 @@ public partial class APFXUltimate : Robot
         var dailyVwapOverlay = new DailyVwapOverlayModule(ShowDailyVwap);
         var previousPeriodLevelsOverlay = new PreviousPeriodLevelsOverlayModule(ShowPreviousPeriodLevels);
         var marketPulseLevelsOverlay = new MarketPulseLevelsOverlayModule(Bars, marketPulseAtr, Symbol, MarketPulseSwingLeft, MarketPulseSwingRight, MarketPulseMinimumTests, MarketPulseMaximumLevelsPerSide, MarketPulseMergeAtr, ShowMarketPulseLevels);
-        var volumeProfileOverlay = new DailyVolumeProfileOverlayModule(VolumeProfileDays, ShowVolumeProfile);
+        var volumeProfileConfiguration = new VolumeProfileConfiguration(VolumeProfileDays, VolumeProfileBinSizePips, VolumeProfileValueAreaPercent / 100d, ShowVolumeProfileHistogram, ShowVolumeProfilePoc, ShowVolumeProfileValueArea, ShowVolumeProfileNodes, ShowVolumeProfileSessions, ShowVolumeProfileComposite);
+        var volumeProfileOverlay = new DailyVolumeProfileOverlayModule(volumeProfileConfiguration, volumeProfileCache, Symbol.PipSize, () => marketPulseLevelsOverlay.ActiveLevelPrices, ShowVolumeProfile);
+        var oilVariation = new OilVariationSection(ChartPanelFontSize, GetOilInstrumentBars("WTI", "XTIUSD"), GetOilInstrumentBars("Brent", "XBRUSD"), GetOilInstrumentBars("Gold", "XAUUSD"));
         _userTimeOffsetChangedHandler = args => calendarNewsState.RefreshDisplayedTimes(args.UserTimeOffset);
         Application.UserTimeOffsetChanged += _userTimeOffsetChangedHandler;
         var context = new RobotContext(
@@ -245,7 +267,7 @@ public partial class APFXUltimate : Robot
             },
             getDailyVwapData: () => DailyVwapCalculator.Calculate(minuteBars, Server.TimeInUtc),
             getPreviousPeriodLevels: () => PreviousPeriodLevelsCalculator.Calculate(dailyBars, weeklyBars),
-            getDailyVolumeProfiles: (daysToShow, rowCount) => volumeProfileCache.GetProfiles(Server.TimeInUtc, daysToShow, rowCount),
+            getDailyVolumeProfiles: (daysToShow, _) => volumeProfileCache.GetProfiles(Server.TimeInUtc, daysToShow, VolumeProfileBinSizePips * Symbol.PipSize, VolumeProfileValueAreaPercent / 100d),
             drawChartTrendLine: (name, startTime, startPrice, endTime, endPrice, color, thickness) => Chart.DrawTrendLine(name, startTime, startPrice, endTime, endPrice, color, thickness, LineStyle.Solid),
             addChartControl: control => Chart.AddControl(control),
             removeChartControl: control => Chart.RemoveControl(control),
@@ -401,11 +423,28 @@ public partial class APFXUltimate : Robot
             previousPeriodLevelsOverlay,
             marketPulseLevelsOverlay,
             volumeProfileOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay)
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay, ShowOilVariation ? oilVariation : null)
         });
 
         _modules.Start(context);
         Timer.Start(TimeSpan.FromSeconds(1));
+    }
+
+    private OilInstrumentBars GetOilInstrumentBars(string label, string symbolName)
+    {
+        Bars? GetBars(TimeFrame timeFrame)
+        {
+            try
+            {
+                return MarketData.GetBars(timeFrame, symbolName);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        return new OilInstrumentBars(label, GetBars(TimeFrame.Minute5), GetBars(TimeFrame.Minute15), GetBars(TimeFrame.Hour), GetBars(TimeFrame.Daily));
     }
 
     protected override void OnTick()

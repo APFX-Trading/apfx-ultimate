@@ -42,4 +42,8 @@ public static class GraphColorPalette
 
     public static readonly Color VolumeProfile = Color.FromHex("#FF38BDF8");
     public static readonly Color VolumeProfilePointOfControl = Color.FromHex("#FFFFB74D");
+    public static readonly Color VolumeProfileValueArea = Color.FromHex("#FF7DD3FC");
+    public static readonly Color VolumeProfileHighVolumeNode = Color.FromHex("#FF34D399");
+    public static readonly Color VolumeProfileLowVolumeNode = Color.FromHex("#FFF472B6");
+    public static readonly Color VolumeProfileConfluence = Color.FromHex("#FFFDE047");
 }

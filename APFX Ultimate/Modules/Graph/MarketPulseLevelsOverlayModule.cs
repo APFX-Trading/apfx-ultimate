@@ -37,6 +37,7 @@ public sealed class MarketPulseLevelsOverlayModule : IRobotModule
     public string Name => nameof(MarketPulseLevelsOverlayModule);
     public string Label => "Strong S/R Levels (time)";
     public bool IsEnabled { get; private set; }
+    public IReadOnlyList<double> ActiveLevelPrices => _levels.Where(level => level.Tests >= _minimumTests).Select(level => level.Price).ToArray();
 
     public StrongLevelsSnapshot GetNearestLevels(double price)
     {

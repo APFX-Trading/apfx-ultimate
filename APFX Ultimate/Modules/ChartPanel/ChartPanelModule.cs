@@ -17,6 +17,7 @@ public sealed class ChartPanelModule : IRobotModule
     private readonly PreviousPeriodLevelsOverlayModule _previousPeriodLevelsOverlay;
     private readonly MarketPulseLevelsOverlayModule _marketPulseLevelsOverlay;
     private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
+    private readonly OilVariationSection? _oilVariation;
     private Border? _panel;
     private AccountStatisticsSection? _accountStatistics;
     private OpenPositionStatisticsSection? _openPositionStatistics;
@@ -27,7 +28,7 @@ public sealed class ChartPanelModule : IRobotModule
     private GraphControlsSection? _graphControls;
     private RobotContext? _context;
 
-    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
+    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation)
     {
         _position = position;
         _fontSize = fontSize;
@@ -41,6 +42,7 @@ public sealed class ChartPanelModule : IRobotModule
         _previousPeriodLevelsOverlay = previousPeriodLevelsOverlay;
         _marketPulseLevelsOverlay = marketPulseLevelsOverlay;
         _volumeProfileOverlay = volumeProfileOverlay;
+        _oilVariation = oilVariation;
     }
 
     public string Name => nameof(ChartPanelModule);
@@ -72,19 +74,28 @@ public sealed class ChartPanelModule : IRobotModule
         primaryColumn.AddChild(chartContextSection, 1, 0);
         primaryColumn.AddChild(performanceSection, 2, 0);
 
-        var rightColumn = new Grid(3, 1);
-        rightColumn.Rows[0].SetHeightToAuto();
-        rightColumn.Rows[1].SetHeightToAuto();
-        rightColumn.Rows[2].SetHeightToAuto();
+        var rightRowCount = _oilVariation is null ? 3 : 4;
+        var rightColumn = new Grid(rightRowCount, 1);
+        for (var row = 0; row < rightRowCount; row++) rightColumn.Rows[row].SetHeightToAuto();
         var calendarSection = ChartPanelLayout.CreateSection(_calendarNews.CreateControl(context));
         calendarSection.Margin = new Thickness(8, 7, 0, 0);
         var indicatorsSection = ChartPanelLayout.CreateSection(_indicatorStatus.CreateControl(context));
         indicatorsSection.Margin = new Thickness(8, 7, 0, 0);
+        var oilVariationSection = _oilVariation is null ? null : ChartPanelLayout.CreateSection(_oilVariation.CreateControl(context));
+        if (oilVariationSection is not null) oilVariationSection.Margin = new Thickness(8, 7, 0, 0);
         var graphSection = ChartPanelLayout.CreateSection(_graphControls.CreateControl());
         graphSection.Margin = new Thickness(8, 7, 0, 0);
         rightColumn.AddChild(calendarSection, 0, 0);
         rightColumn.AddChild(indicatorsSection, 1, 0);
-        rightColumn.AddChild(graphSection, 2, 0);
+        if (oilVariationSection is not null)
+        {
+            rightColumn.AddChild(oilVariationSection, 2, 0);
+            rightColumn.AddChild(graphSection, 3, 0);
+        }
+        else
+        {
+            rightColumn.AddChild(graphSection, 2, 0);
+        }
         var quickActionsSection = ChartPanelLayout.CreateSection(_tradingControls.CreateControl(context));
 
         layoutGrid.AddChild(primaryColumn, 0, 0);
@@ -104,6 +115,7 @@ public sealed class ChartPanelModule : IRobotModule
         _openPositionStatistics?.RefreshIfDue(context);
         _chartContext?.RefreshIfDue(context);
         _indicatorStatus?.RefreshIfDue(context);
+        _oilVariation?.RefreshIfDue(context);
         _calendarNews?.Refresh(context);
     }
 
@@ -115,6 +127,7 @@ public sealed class ChartPanelModule : IRobotModule
 
     public void OnStop(RobotContext context)
     {
+        _accountStatistics?.FlushDrawdownState(context);
         if (_panel is null)
         {
             return;

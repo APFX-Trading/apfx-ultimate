@@ -14,7 +14,7 @@ public sealed class DailyVolumeProfileCache
 
     public DailyVolumeProfileCache(Bars bars) => _bars = bars ?? throw new ArgumentNullException(nameof(bars));
 
-    public IReadOnlyList<DailyVolumeProfile> GetProfiles(DateTime nowUtc, int daysToShow, int rowCount)
+    public IReadOnlyList<DailyVolumeProfile> GetProfiles(DateTime nowUtc, int daysToShow, double binSize, double valueAreaPercent)
     {
         if (_bars.Count == 0)
         {
@@ -32,8 +32,8 @@ public sealed class DailyVolumeProfileCache
             }
 
             var profile = offset == 0
-                ? GetActiveProfile(start, end, rowCount, nowUtc)
-                : GetCompletedProfile(start, end, rowCount);
+                ? GetActiveProfile(start, end, binSize, valueAreaPercent, nowUtc)
+                : GetCompletedProfile(start, end, binSize, valueAreaPercent);
             if (profile is { } value)
             {
                 profiles.Add(value);
@@ -43,25 +43,48 @@ public sealed class DailyVolumeProfileCache
         return profiles;
     }
 
-    private DailyVolumeProfile? GetCompletedProfile(DateTime start, DateTime end, int rowCount)
+    public IReadOnlyList<DailyVolumeProfile> GetSessionProfiles(DateTime nowUtc, double binSize, double valueAreaPercent)
     {
-        var key = new ProfileCacheKey(start, rowCount);
+        var profiles = new List<DailyVolumeProfile>();
+        AddSessionProfile(profiles, nowUtc, nowUtc.Date.AddHours(7), nowUtc.Date.AddHours(16), "London", binSize, valueAreaPercent);
+        AddSessionProfile(profiles, nowUtc, nowUtc.Date.AddHours(13), nowUtc.Date.AddHours(22), "New York", binSize, valueAreaPercent);
+        return profiles;
+    }
+
+    public DailyVolumeProfile? GetCompositeProfile(DateTime nowUtc, int days, double binSize, double valueAreaPercent)
+    {
+        var profiles = GetProfiles(nowUtc, days, binSize, valueAreaPercent);
+        return VolumeProfileCalculator.Combine(profiles, nowUtc.Date.AddDays(1 - days), nowUtc, $"{days}D Composite", valueAreaPercent);
+    }
+
+    private void AddSessionProfile(List<DailyVolumeProfile> profiles, DateTime nowUtc, DateTime start, DateTime end, string name, double binSize, double valueAreaPercent)
+    {
+        var effectiveEnd = nowUtc < end ? nowUtc : end;
+        if (effectiveEnd > start && VolumeProfileCalculator.CalculatePeriod(_bars, start, effectiveEnd, name, binSize, valueAreaPercent) is { } profile)
+        {
+            profiles.Add(profile);
+        }
+    }
+
+    private DailyVolumeProfile? GetCompletedProfile(DateTime start, DateTime end, double binSize, double valueAreaPercent)
+    {
+        var key = new ProfileCacheKey(start, binSize, valueAreaPercent);
         if (!_completedProfiles.TryGetValue(key, out var profile))
         {
-            profile = VolumeProfileCalculator.CalculateDay(_bars, start, end, rowCount);
+            profile = VolumeProfileCalculator.CalculatePeriod(_bars, start, end, "Day", binSize, valueAreaPercent);
             _completedProfiles[key] = profile;
         }
 
         return profile;
     }
 
-    private DailyVolumeProfile? GetActiveProfile(DateTime start, DateTime end, int rowCount, DateTime nowUtc)
+    private DailyVolumeProfile? GetActiveProfile(DateTime start, DateTime end, double binSize, double valueAreaPercent, DateTime nowUtc)
     {
-        var key = new ProfileCacheKey(start, rowCount);
+        var key = new ProfileCacheKey(start, binSize, valueAreaPercent);
         var minute = new DateTime(nowUtc.Year, nowUtc.Month, nowUtc.Day, nowUtc.Hour, nowUtc.Minute, 0, DateTimeKind.Unspecified);
         if (_activeKey != key || _activeMinute != minute)
         {
-            _activeProfile = VolumeProfileCalculator.CalculateDay(_bars, start, end, rowCount);
+            _activeProfile = VolumeProfileCalculator.CalculatePeriod(_bars, start, end, "Day", binSize, valueAreaPercent);
             _activeKey = key;
             _activeMinute = minute;
         }
@@ -69,5 +92,5 @@ public sealed class DailyVolumeProfileCache
         return _activeProfile;
     }
 
-    private readonly record struct ProfileCacheKey(DateTime StartTime, int RowCount);
+    private readonly record struct ProfileCacheKey(DateTime StartTime, double BinSize, double ValueAreaPercent);
 }

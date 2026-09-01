@@ -26,4 +26,6 @@ public sealed class GridStatus
     public double CurrentEquity { get; set; }
     public double DrawdownUsed { get; set; }
     public double DrawdownRemaining { get; set; }
+    public double NearestProfileLevelDistancePips { get; set; }
+    public bool PendingOrderNearHighVolumeNode { get; set; }
 }
