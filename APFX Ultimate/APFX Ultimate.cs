@@ -49,6 +49,13 @@ public partial class APFXUltimate : Robot
     [Parameter("Minimum Impact", DefaultValue = CalendarMinimumImpact.Medium, Group = "Calendar News")]
     public CalendarMinimumImpact CalendarMinimumImpact { get; set; }
 
+    [Parameter("FRED API Key", DefaultValue = "", Group = "US Treasury Yields")]
+    public string FredApiKey { get; set; } = string.Empty;
+    [Parameter("Refresh (Minutes)", DefaultValue = 60, MinValue = 15, MaxValue = 1440, Group = "US Treasury Yields")]
+    public int TreasuryYieldRefreshMinutes { get; set; }
+    [Parameter("Show Treasury Yields", DefaultValue = true, Group = "US Treasury Yields")]
+    public bool ShowTreasuryYields { get; set; }
+
     [Parameter("Enable", DefaultValue = false, Group = "Telegram Reporting")]
     public bool TelegramReportingEnabled { get; set; }
 
@@ -205,6 +212,7 @@ public partial class APFXUltimate : Robot
         var directionalMovement = Indicators.DirectionalMovementSystem(14);
         var gridStatus = new GridStatus();
         var calendarNewsState = new CalendarNewsState();
+        var treasuryYieldState = new TreasuryYieldState();
         var marketHoursOverlay = new MarketHoursOverlayModule(ShowAsiaSession, ShowEuropeSession, ShowUsSession, ShowPsychologicalLevels, SymbolName);
         var emaOverlay = new EmaOverlayModule(EmaFastPeriod, EmaSlowPeriod, ShowEma);
         var bollingerBandsOverlay = new BollingerBandsOverlayModule(BollingerPeriod, BollingerStandardDeviations, ShowBollingerBands);
@@ -415,6 +423,7 @@ public partial class APFXUltimate : Robot
             new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtrDistance, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent, GridMaxDrawdownAmount), gridStatus),
             new TelegramReportingModule(new TelegramReportingConfiguration(TelegramReportingEnabled, TelegramBotToken, TelegramChatId, TelegramUtcOffsetMinutes, TelegramEnableDaily, TelegramDailyHour, TelegramDailyMinute, TelegramEnableWeekly, TelegramWeeklyDay, TelegramWeeklyHour, TelegramWeeklyMinute, TelegramEnableMonthly, TelegramMonthlyDay, TelegramMonthlyHour, TelegramMonthlyMinute, TelegramAlertClosedTrades, TelegramSymbolFilter, TelegramLabelFilter, TelegramReportTitle)),
             new CalendarNewsModule(new CalendarNewsConfiguration(CalendarApiKey, CalendarHoursAhead, CalendarRefreshMinutes, CalendarMinimumImpact), calendarNewsState),
+            new TreasuryYieldModule(new TreasuryYieldConfiguration(FredApiKey, TreasuryYieldRefreshMinutes), treasuryYieldState),
             new CalendarNewsChartOverlayModule(calendarNewsState),
             marketHoursOverlay,
             emaOverlay,
@@ -423,7 +432,7 @@ public partial class APFXUltimate : Robot
             previousPeriodLevelsOverlay,
             marketPulseLevelsOverlay,
             volumeProfileOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay, ShowOilVariation ? oilVariation : null)
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay, ShowOilVariation ? oilVariation : null, ShowTreasuryYields ? treasuryYieldState : null)
         });
 
         _modules.Start(context);

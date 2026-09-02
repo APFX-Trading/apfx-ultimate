@@ -18,6 +18,7 @@ public sealed class ChartPanelModule : IRobotModule
     private readonly MarketPulseLevelsOverlayModule _marketPulseLevelsOverlay;
     private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
     private readonly OilVariationSection? _oilVariation;
+    private readonly TreasuryYieldSection? _treasuryYields;
     private Border? _panel;
     private AccountStatisticsSection? _accountStatistics;
     private OpenPositionStatisticsSection? _openPositionStatistics;
@@ -28,7 +29,7 @@ public sealed class ChartPanelModule : IRobotModule
     private GraphControlsSection? _graphControls;
     private RobotContext? _context;
 
-    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation)
+    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation, TreasuryYieldState? treasuryYieldState)
     {
         _position = position;
         _fontSize = fontSize;
@@ -43,6 +44,7 @@ public sealed class ChartPanelModule : IRobotModule
         _marketPulseLevelsOverlay = marketPulseLevelsOverlay;
         _volumeProfileOverlay = volumeProfileOverlay;
         _oilVariation = oilVariation;
+        _treasuryYields = treasuryYieldState is null ? null : new TreasuryYieldSection(fontSize, treasuryYieldState);
     }
 
     public string Name => nameof(ChartPanelModule);
@@ -74,7 +76,7 @@ public sealed class ChartPanelModule : IRobotModule
         primaryColumn.AddChild(chartContextSection, 1, 0);
         primaryColumn.AddChild(performanceSection, 2, 0);
 
-        var rightRowCount = _oilVariation is null ? 3 : 4;
+        var rightRowCount = 3 + (_oilVariation is null ? 0 : 1) + (_treasuryYields is null ? 0 : 1);
         var rightColumn = new Grid(rightRowCount, 1);
         for (var row = 0; row < rightRowCount; row++) rightColumn.Rows[row].SetHeightToAuto();
         var calendarSection = ChartPanelLayout.CreateSection(_calendarNews.CreateControl(context));
@@ -83,19 +85,16 @@ public sealed class ChartPanelModule : IRobotModule
         indicatorsSection.Margin = new Thickness(8, 7, 0, 0);
         var oilVariationSection = _oilVariation is null ? null : ChartPanelLayout.CreateSection(_oilVariation.CreateControl(context));
         if (oilVariationSection is not null) oilVariationSection.Margin = new Thickness(8, 7, 0, 0);
+        var treasuryYieldSection = _treasuryYields is null ? null : ChartPanelLayout.CreateSection(_treasuryYields.CreateControl(context));
+        if (treasuryYieldSection is not null) treasuryYieldSection.Margin = new Thickness(8, 7, 0, 0);
         var graphSection = ChartPanelLayout.CreateSection(_graphControls.CreateControl());
         graphSection.Margin = new Thickness(8, 7, 0, 0);
         rightColumn.AddChild(calendarSection, 0, 0);
         rightColumn.AddChild(indicatorsSection, 1, 0);
-        if (oilVariationSection is not null)
-        {
-            rightColumn.AddChild(oilVariationSection, 2, 0);
-            rightColumn.AddChild(graphSection, 3, 0);
-        }
-        else
-        {
-            rightColumn.AddChild(graphSection, 2, 0);
-        }
+        var nextRightRow = 2;
+        if (oilVariationSection is not null) rightColumn.AddChild(oilVariationSection, nextRightRow++, 0);
+        if (treasuryYieldSection is not null) rightColumn.AddChild(treasuryYieldSection, nextRightRow++, 0);
+        rightColumn.AddChild(graphSection, nextRightRow, 0);
         var quickActionsSection = ChartPanelLayout.CreateSection(_tradingControls.CreateControl(context));
 
         layoutGrid.AddChild(primaryColumn, 0, 0);
@@ -116,6 +115,7 @@ public sealed class ChartPanelModule : IRobotModule
         _chartContext?.RefreshIfDue(context);
         _indicatorStatus?.RefreshIfDue(context);
         _oilVariation?.RefreshIfDue(context);
+        _treasuryYields?.Refresh(context);
         _calendarNews?.Refresh(context);
     }
 
