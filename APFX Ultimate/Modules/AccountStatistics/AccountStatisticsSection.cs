@@ -20,6 +20,7 @@ public sealed class AccountStatisticsSection
     private readonly Dictionary<string, TextBlock> _profitLossCells = new();
     private readonly Dictionary<string, TextBlock> _drawdownCells = new();
     private readonly Dictionary<string, TickDrawdownWindow> _tickDrawdownWindows = new();
+    private readonly DateTime _performanceFrom;
     private DateTime _nextRefreshAt = DateTime.MinValue;
     private DateTime _lastStatisticsDate = DateTime.MinValue;
     private int _lastHistoricalTradeCount = -1;
@@ -27,6 +28,11 @@ public sealed class AccountStatisticsSection
     private DateTime _dailyDrawdownDate = DateTime.MinValue;
     private DateTime _nextDailyDrawdownFlushAt = DateTime.MinValue;
     private bool _dailyDrawdownStorageUnavailable;
+
+    public AccountStatisticsSection(DateTime performanceFrom)
+    {
+        _performanceFrom = performanceFrom;
+    }
 
     public ControlBase CreateControl(RobotContext context, double fontSize)
     {
@@ -98,8 +104,9 @@ public sealed class AccountStatisticsSection
 
         foreach (var period in Periods)
         {
-            var summary = Summarize(historicalTrades, period.StartAt(now), now);
-            var drawdown = GetDrawdown(period, summary);
+            var periodStart = GetEffectivePeriodStart(period, now);
+            var summary = Summarize(historicalTrades, periodStart, now);
+            var drawdown = GetDrawdown(period, periodStart, summary);
             _winLossCells[period.Name].Text = FormatWinLoss(summary);
             _profitLossCells[period.Name].Text = FormatProfitLoss(summary.NetProfit, summary.StartingBalance);
             _profitLossCells[period.Name].ForegroundColor = summary.NetProfit switch
@@ -128,7 +135,12 @@ public sealed class AccountStatisticsSection
         TrackPersistedDailyDrawdown(context, now, equity);
         foreach (var period in Periods)
         {
-            var periodStart = period.StartAt(now);
+            var periodStart = GetEffectivePeriodStart(period, now);
+            if (periodStart > now)
+            {
+                _tickDrawdownWindows.Remove(period.Name);
+                continue;
+            }
             if (!_tickDrawdownWindows.TryGetValue(period.Name, out var window) || window.PeriodStart != periodStart)
             {
                 _tickDrawdownWindows[period.Name] = new TickDrawdownWindow(periodStart, equity);
@@ -149,9 +161,9 @@ public sealed class AccountStatisticsSection
         PersistDailyDrawdown(context);
     }
 
-    private (double Amount, double PeakBalance) GetDrawdown(StatisticsPeriod period, StatisticsSummary summary)
+    private (double Amount, double PeakBalance) GetDrawdown(StatisticsPeriod period, DateTime periodStart, StatisticsSummary summary)
     {
-        if (period.Name == "Today" && _dailyDrawdown is { } persisted && persisted.MaximumDrawdown > summary.MaximumDrawdown)
+        if (period.Name == "Today" && _performanceFrom <= periodStart && _dailyDrawdown is { } persisted && persisted.MaximumDrawdown > summary.MaximumDrawdown)
         {
             return (persisted.MaximumDrawdown, persisted.PeakEquity);
         }
@@ -299,6 +311,12 @@ public sealed class AccountStatisticsSection
     {
         var daysSinceMonday = ((int)now.DayOfWeek + 6) % 7;
         return now.Date.AddDays(-daysSinceMonday);
+    }
+
+    private DateTime GetEffectivePeriodStart(StatisticsPeriod period, DateTime now)
+    {
+        var periodStart = period.StartAt(now);
+        return _performanceFrom > periodStart ? _performanceFrom : periodStart;
     }
 
     private static string FormatWinLoss(StatisticsSummary summary)

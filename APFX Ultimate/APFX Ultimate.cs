@@ -49,6 +49,9 @@ public partial class APFXUltimate : Robot
     [Parameter("Minimum Impact", DefaultValue = CalendarMinimumImpact.Medium, Group = "Calendar News")]
     public CalendarMinimumImpact CalendarMinimumImpact { get; set; }
 
+    [Parameter("Count From", DefaultValue = "2000-01-01 00:00:00", Group = "Performance")]
+    public DateTime PerformanceFrom { get; set; }
+
     [Parameter("FRED API Key", DefaultValue = "", Group = "US Treasury Yields")]
     public string FredApiKey { get; set; } = string.Empty;
     [Parameter("Refresh (Minutes)", DefaultValue = 60, MinValue = 15, MaxValue = 1440, Group = "US Treasury Yields")]
@@ -432,7 +435,7 @@ public partial class APFXUltimate : Robot
             previousPeriodLevelsOverlay,
             marketPulseLevelsOverlay,
             volumeProfileOverlay,
-            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay, ShowOilVariation ? oilVariation : null, ShowTreasuryYields ? treasuryYieldState : null)
+            _chartPanelModule = new ChartPanelModule(ChartPanelPosition, ChartPanelFontSize, gridStatus, GridAtrPeriod, PerformanceFrom, calendarNewsState, marketHoursOverlay, emaOverlay, bollingerBandsOverlay, dailyVwapOverlay, previousPeriodLevelsOverlay, marketPulseLevelsOverlay, volumeProfileOverlay, ShowOilVariation ? oilVariation : null, ShowTreasuryYields ? treasuryYieldState : null)
         });
 
         _modules.Start(context);

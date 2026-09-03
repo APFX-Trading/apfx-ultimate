@@ -9,6 +9,7 @@ public sealed class ChartPanelModule : IRobotModule
     private readonly double _fontSize;
     private readonly GridStatus? _gridStatus;
     private readonly int _atrPeriod;
+    private readonly DateTime _performanceFrom;
     private readonly CalendarNewsState _calendarNewsState;
     private readonly MarketHoursOverlayModule _marketHoursOverlay;
     private readonly EmaOverlayModule _emaOverlay;
@@ -29,12 +30,13 @@ public sealed class ChartPanelModule : IRobotModule
     private GraphControlsSection? _graphControls;
     private RobotContext? _context;
 
-    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation, TreasuryYieldState? treasuryYieldState)
+    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, DateTime performanceFrom, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation, TreasuryYieldState? treasuryYieldState)
     {
         _position = position;
         _fontSize = fontSize;
         _gridStatus = gridStatus;
         _atrPeriod = atrPeriod;
+        _performanceFrom = performanceFrom;
         _calendarNewsState = calendarNewsState;
         _marketHoursOverlay = marketHoursOverlay;
         _emaOverlay = emaOverlay;
@@ -61,7 +63,7 @@ public sealed class ChartPanelModule : IRobotModule
         primaryColumn.Rows[1].SetHeightToAuto();
         primaryColumn.Rows[2].SetHeightToAuto();
 
-        _accountStatistics = new AccountStatisticsSection();
+        _accountStatistics = new AccountStatisticsSection(_performanceFrom);
         _accountStatistics.TrackDrawdown(context);
         _openPositionStatistics = new OpenPositionStatisticsSection(_fontSize, _gridStatus);
         _chartContext = new ChartContextSection(_fontSize, _marketHoursOverlay, _marketPulseLevelsOverlay);
