@@ -68,13 +68,14 @@ public sealed class ChartContextSection
         var decimals = GetPriceDecimals(market.PipSize);
         var priceFormat = "N" + decimals;
         var dailyChange = market.Bid - chart.DailyOpen;
+        var dailyChangePips = dailyChange / market.PipSize;
         var dailyChangePercent = chart.DailyOpen == 0 ? 0 : dailyChange / chart.DailyOpen * 100;
         var dailyRange = chart.DailyHigh - chart.DailyLow;
         var rangePips = dailyRange / market.PipSize;
         var atrMultiple = market.AtrPips <= 0 ? 0 : rangePips / market.AtrPips;
 
         _valueCells["Symbol / TF"].Text = $"{chart.SymbolName} · {chart.TimeFrameName}";
-        SetSignedValue("Price / Day", $"{market.Bid.ToString(priceFormat)}  {dailyChange:+0.##;-0.##;0} ({dailyChangePercent:+0.00;-0.00;0.00}%)", dailyChange);
+        SetSignedValue("Price / Day", $"{market.Bid.ToString(priceFormat)}  {dailyChangePips:+0.0;-0.0;0.0} pips ({dailyChangePercent:+0.00;-0.00;0.00}%)", dailyChange);
         _valueCells["Today H / L"].Text = $"{chart.DailyHigh.ToString(priceFormat)} / {chart.DailyLow.ToString(priceFormat)}";
         _valueCells["To High / Low"].Text = $"{FormatDistance(chart.DailyHigh - market.Bid, market.PipSize)} / {FormatDistance(market.Bid - chart.DailyLow, market.PipSize)}";
         _valueCells["Range / ATR"].Text = $"{rangePips:N0} pips · {atrMultiple:N2}×";
