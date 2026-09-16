@@ -5,8 +5,10 @@ namespace cAlgo.Robots;
 /// </summary>
 public sealed class CalendarNewsSection
 {
-    private const int MaximumEvents = 8;
-    private const int MaximumRows = MaximumEvents + 2;
+    private const int MaximumEvents = 100;
+    private const int MaximumVisibleEvents = 8;
+    // Every event can introduce a date heading, so reserve enough rows for both.
+    private const int MaximumRows = MaximumEvents * 2;
     private readonly double _fontSize;
     private readonly CalendarNewsState _state;
     private readonly List<NewsRow> _newsRows = new();
@@ -73,7 +75,9 @@ public sealed class CalendarNewsSection
             BackgroundColor = Color.FromHex("#FF112237"),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalAlignment = VerticalAlignment.Top
+            VerticalAlignment = VerticalAlignment.Top,
+            // Preserve the compact panel height while allowing the full calendar feed to scroll.
+            Height = (MaximumVisibleEvents + 3) * Math.Max(16, _fontSize + 5)
         }, 2, 0);
         Refresh(context);
         return section;
