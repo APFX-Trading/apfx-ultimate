@@ -7,6 +7,7 @@ public sealed class ChartPanelModule : IRobotModule
 {
     private readonly PanelPosition _position;
     private readonly double _fontSize;
+    private readonly GridTradingModule _gridTrading;
     private readonly GridStatus? _gridStatus;
     private readonly int _atrPeriod;
     private readonly DateTime _performanceFrom;
@@ -30,8 +31,9 @@ public sealed class ChartPanelModule : IRobotModule
     private GraphControlsSection? _graphControls;
     private RobotContext? _context;
 
-    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, DateTime performanceFrom, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation, TreasuryYieldState? treasuryYieldState)
+    public ChartPanelModule(PanelPosition position, double fontSize, GridStatus? gridStatus, int atrPeriod, DateTime performanceFrom, CalendarNewsState calendarNewsState, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, OilVariationSection? oilVariation, TreasuryYieldState? treasuryYieldState, GridTradingModule gridTrading)
     {
+        _gridTrading = gridTrading;
         _position = position;
         _fontSize = fontSize;
         _gridStatus = gridStatus;
@@ -70,7 +72,7 @@ public sealed class ChartPanelModule : IRobotModule
         _tradingControls = new TradingControlsSection(_fontSize, () => RefreshAccountData(context));
         _indicatorStatus = new IndicatorStatusSection(_fontSize, _atrPeriod);
         _calendarNews = new CalendarNewsSection(_fontSize, _calendarNewsState);
-        _graphControls = new GraphControlsSection(_fontSize, _marketHoursOverlay, _emaOverlay, _bollingerBandsOverlay, _dailyVwapOverlay, _previousPeriodLevelsOverlay, _marketPulseLevelsOverlay, _volumeProfileOverlay);
+        _graphControls = new GraphControlsSection(_fontSize, _marketHoursOverlay, _emaOverlay, _bollingerBandsOverlay, _dailyVwapOverlay, _previousPeriodLevelsOverlay, _marketPulseLevelsOverlay, _volumeProfileOverlay, _gridTrading);
         var liveStatusSection = ChartPanelLayout.CreateSection(_openPositionStatistics.CreateControl(context));
         var chartContextSection = ChartPanelLayout.CreateSection(_chartContext.CreateControl(context));
         var performanceSection = ChartPanelLayout.CreateSection(_accountStatistics.CreateControl(context, _fontSize));

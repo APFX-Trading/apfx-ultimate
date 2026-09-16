@@ -6,6 +6,7 @@ namespace cAlgo.Robots;
 public sealed class GraphControlsSection
 {
     private readonly double _fontSize;
+    private readonly GridTradingModule _gridTrading;
     private readonly MarketHoursOverlayModule _marketHoursOverlay;
     private readonly EmaOverlayModule _emaOverlay;
     private readonly BollingerBandsOverlayModule _bollingerBandsOverlay;
@@ -14,8 +15,9 @@ public sealed class GraphControlsSection
     private readonly MarketPulseLevelsOverlayModule _marketPulseLevelsOverlay;
     private readonly DailyVolumeProfileOverlayModule _volumeProfileOverlay;
 
-    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay)
+    public GraphControlsSection(double fontSize, MarketHoursOverlayModule marketHoursOverlay, EmaOverlayModule emaOverlay, BollingerBandsOverlayModule bollingerBandsOverlay, DailyVwapOverlayModule dailyVwapOverlay, PreviousPeriodLevelsOverlayModule previousPeriodLevelsOverlay, MarketPulseLevelsOverlayModule marketPulseLevelsOverlay, DailyVolumeProfileOverlayModule volumeProfileOverlay, GridTradingModule gridTrading)
     {
+        _gridTrading = gridTrading ?? throw new ArgumentNullException(nameof(gridTrading));
         _fontSize = fontSize;
         _marketHoursOverlay = marketHoursOverlay ?? throw new ArgumentNullException(nameof(marketHoursOverlay));
         _emaOverlay = emaOverlay ?? throw new ArgumentNullException(nameof(emaOverlay));
@@ -51,6 +53,7 @@ public sealed class GraphControlsSection
         section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, GraphColorPalette.PreviousDayHigh, GraphColorPalette.PreviousDayLow, GraphColorPalette.PreviousDayClose, GraphColorPalette.PreviousWeekHigh, GraphColorPalette.PreviousWeekLow, GraphColorPalette.PreviousWeekClose));
         section.AddChild(CreateOverlayToggle(_marketPulseLevelsOverlay.Label, _marketPulseLevelsOverlay.IsEnabled, _marketPulseLevelsOverlay.SetEnabled, GraphColorPalette.StrongSupport, GraphColorPalette.StrongResistance));
         section.AddChild(CreateVolumeProfileToggle());
+        section.AddChild(CreateOverlayToggle("TP / next entry preview", _gridTrading.IsPreviewEnabled, _gridTrading.SetPreviewEnabled, Color.FromHex("#FFE879F9"), Color.FromHex("#FF6FE3FF")));
         return section;
     }
 

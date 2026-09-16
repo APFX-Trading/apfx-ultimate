@@ -11,6 +11,10 @@ public sealed class GridTradingModule : IRobotModule
     private const string LockLineName = "APFXUltimate.Lock";
     private const string TargetLabelName = TargetLineName + ".Label";
     private const string LockLabelName = LockLineName + ".Label";
+    private const string PreviewPrefix = "APFXUltimate.Preview";
+    private const string PreviewStorageKey = "APFXUltimateTradePreviewV1";
+    private readonly bool _configuredPreviewEnabled;
+    private RobotContext? _context;
     private readonly GridConfiguration _config;
     private readonly GridStatus _status;
     private bool _closingBasket;
@@ -22,11 +26,43 @@ public sealed class GridTradingModule : IRobotModule
     private DailyVolumeProfile? _currentVolumeProfile;
     private bool _insufficientMarginLogged;
 
-    public GridTradingModule(GridConfiguration config, GridStatus status) { _config = config; _status = status; }
+    public GridTradingModule(GridConfiguration config, GridStatus status, bool previewEnabled = true)
+    {
+        _config = config;
+        _status = status;
+        _configuredPreviewEnabled = previewEnabled;
+        IsPreviewEnabled = previewEnabled;
+    }
     public string Name => nameof(GridTradingModule);
+    public bool IsPreviewEnabled { get; private set; }
+
+    public void SetPreviewEnabled(bool enabled)
+    {
+        IsPreviewEnabled = enabled;
+        if (_context is null) return;
+        SavePreviewPreference(_context);
+        UpdatePreviewLines(_context, _context.GetMarketSnapshot());
+    }
+
+    private void SavePreviewPreference(RobotContext context)
+    {
+        context.SetLocalValue(PreviewStorageKey, $"{_configuredPreviewEnabled}:{IsPreviewEnabled}");
+        context.FlushLocalValues();
+    }
 
     public void OnStart(RobotContext context)
     {
+        _context = context;
+        IsPreviewEnabled = _configuredPreviewEnabled;
+        var saved = context.GetLocalValue(PreviewStorageKey)?.Split(':');
+        if (saved is { Length: 2 }
+            && bool.TryParse(saved[0], out var previousSetting)
+            && previousSetting == _configuredPreviewEnabled
+            && bool.TryParse(saved[1], out var savedEnabled))
+        {
+            IsPreviewEnabled = savedEnabled;
+        }
+        SavePreviewPreference(context);
         UpdateVolumeInfo(context);
         _status.Direction = _config.Direction;
         _status.BaseTarget = _config.TargetProfit;
@@ -43,6 +79,7 @@ public sealed class GridTradingModule : IRobotModule
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
         _status.State = "Waiting for manual position";
+        UpdatePreviewLines(context, snapshot);
         context.Log($"Grid armed ({_config.Direction}); waiting for a manual position.");
     }
 
@@ -73,8 +110,13 @@ public sealed class GridTradingModule : IRobotModule
                 context.Log($"Grid adopted manual {direction} position.");
                 break;
             }
-            if (_activeDirection is null) return;
+            if (_activeDirection is null)
+            {
+                UpdatePreviewLines(context, snapshot);
+                return;
+            }
         }
+        ClearPreviewLines(context);
         var positions = context.GetChartPositions(_activeDirection.Value);
         _status.BasketProfit = positions.Sum(p => p.NetProfit);
         _status.EntriesPlaced = context.GetGridPendingOrders(LabelPrefix(snapshot.SymbolName)).Count;
@@ -109,6 +151,7 @@ public sealed class GridTradingModule : IRobotModule
     {
         var snapshot = context.GetMarketSnapshot();
         UpdateDrawdownStatus(snapshot);
+        UpdatePreviewLines(context, snapshot);
 
         if (!_config.Enabled || _activeDirection is null)
         {
@@ -127,7 +170,11 @@ public sealed class GridTradingModule : IRobotModule
         }
     }
 
-    public void OnStop(RobotContext context) => ClearChartLines(context);
+    public void OnStop(RobotContext context)
+    {
+        ClearChartLines(context);
+        _context = null;
+    }
 
     private void PlaceNextLevels(RobotContext context, MarketSnapshot snapshot)
     {
@@ -332,10 +379,76 @@ public sealed class GridTradingModule : IRobotModule
     }
     private static void ClearChartLines(RobotContext context)
     {
+        ClearPreviewLines(context);
         context.RemoveChartObject(TargetLineName);
         context.RemoveChartObject(LockLineName);
         context.RemoveChartObject(TargetLabelName);
         context.RemoveChartObject(LockLabelName);
+    }
+    private void UpdatePreviewLines(RobotContext context, MarketSnapshot snapshot)
+    {
+        if (!IsPreviewEnabled || !_config.Enabled || _closingBasket || _activeDirection is not null
+            || GetChartSymbolPositions(context).Count > 0)
+        {
+            ClearPreviewLines(context);
+            return;
+        }
+
+        var volume = context.GetTradeVolumeInfo().VolumeInUnits;
+        var amountPerPip = volume * snapshot.PipValue;
+        var target = GetEffectiveTarget(snapshot);
+        var distance = GetEffectiveDistance(snapshot);
+        if (!double.IsFinite(amountPerPip) || amountPerPip <= 0
+            || !double.IsFinite(snapshot.PipSize) || snapshot.PipSize <= 0
+            || !double.IsFinite(snapshot.Bid) || snapshot.Bid <= 0
+            || !double.IsFinite(snapshot.Ask) || snapshot.Ask <= 0
+            || !double.IsFinite(target) || target < 0 || !double.IsFinite(distance))
+        {
+            ClearPreviewLines(context);
+            return;
+        }
+
+        var viewport = context.GetChartViewport();
+        var duration = viewport.EndTime - viewport.StartTime;
+        if (duration.Ticks <= 0)
+        {
+            ClearPreviewLines(context);
+            return;
+        }
+
+        // Keep each direction in its own short section to avoid overlapping labels.
+        foreach (var direction in GetAllowedDirections())
+        {
+            var isBuy = direction == TradeType.Buy;
+            var end = viewport.EndTime.AddTicks(-duration.Ticks * (isBuy ? 1 : 4) / 20);
+            var start = end.AddTicks(-duration.Ticks / 10);
+            var sign = isBuy ? 1d : -1d;
+            // Opening buys fill at Ask and sells at Bid. These are gross-profit
+            // estimates; actual basket targets also account for incurred costs.
+            var entry = isBuy ? snapshot.Ask : snapshot.Bid;
+            var targetPrice = entry + sign * target / amountPerPip * snapshot.PipSize;
+            var pendingPrice = entry - sign * distance / amountPerPip * snapshot.PipSize;
+            DrawPreviewLine(context, direction, "Target", $"{direction} TP ~{target:N2}", targetPrice, start, end, Color.FromHex("#FFE879F9"));
+            DrawPreviewLine(context, direction, "Pending", $"{direction} next", pendingPrice, start, end, Color.FromHex("#FF6FE3FF"));
+        }
+    }
+
+    private static void DrawPreviewLine(RobotContext context, TradeType direction, string kind, string label, double price, DateTime start, DateTime end, Color color)
+    {
+        var name = $"{PreviewPrefix}.{direction}.{kind}";
+        context.DrawChartTrendLine(name, start, price, end, price, color, 2);
+        context.DrawChartText(name + ".Label", label, start.AddTicks((end - start).Ticks / 2), price, color);
+    }
+
+    private static void ClearPreviewLines(RobotContext context)
+    {
+        foreach (var direction in new[] { TradeType.Buy, TradeType.Sell })
+        foreach (var kind in new[] { "Target", "Pending" })
+        {
+            var name = $"{PreviewPrefix}.{direction}.{kind}";
+            context.RemoveChartObject(name);
+            context.RemoveChartObject(name + ".Label");
+        }
     }
     private double GetEffectiveTarget(MarketSnapshot snapshot) => _config.UseAtr
         ? snapshot.AtrPips * AtrTargetAmountPerPip
