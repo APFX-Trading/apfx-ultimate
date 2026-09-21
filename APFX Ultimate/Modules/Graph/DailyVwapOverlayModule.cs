@@ -7,6 +7,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     private const int MaximumPointsPerLine = 120;
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
     private readonly HashSet<string> _objectNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Queue<string>> _segmentNames = new(StringComparer.Ordinal);
     private RobotContext? _context;
     private DateTime _nextRefreshAt = DateTime.MinValue;
     private DateTime _renderedSessionDate = DateTime.MinValue;
@@ -68,6 +69,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     private void RenderFullPath(DailyVwapData data)
     {
         var activeNames = new HashSet<string>(StringComparer.Ordinal);
+        _segmentNames.Clear();
         DrawFullLine("Vwap", data.Vwap, GraphColorPalette.Vwap, 2, "Daily VWAP", activeNames);
         DrawFullLine("UpperOne", data.UpperOne, GraphColorPalette.VwapOneDeviation, 1, null, activeNames);
         DrawFullLine("LowerOne", data.LowerOne, GraphColorPalette.VwapOneDeviation, 1, null, activeNames);
@@ -92,11 +94,14 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     private void DrawFullLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label, HashSet<string> activeNames)
     {
         var sampledPoints = Downsample(points);
+        var segmentNames = new Queue<string>();
+        _segmentNames[key] = segmentNames;
         for (var index = 1; index < sampledPoints.Count; index++)
         {
             DrawSegment(key, sampledPoints[index - 1], sampledPoints[index], color, thickness);
             var name = GetSegmentName(key, sampledPoints[index - 1]);
             activeNames.Add(name);
+            segmentNames.Enqueue(name);
         }
 
         DrawLabel(key, label, sampledPoints, color, activeNames);
@@ -108,6 +113,18 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         if (sampledPoints.Count >= 2)
         {
             DrawSegment(key, sampledPoints[^2], sampledPoints[^1], color, thickness);
+            var name = GetSegmentName(key, sampledPoints[^2]);
+            if (_objectNames.Add(name))
+            {
+                var segmentNames = _segmentNames[key];
+                segmentNames.Enqueue(name);
+                if (segmentNames.Count > MaximumPointsPerLine - 1)
+                {
+                    var oldest = segmentNames.Dequeue();
+                    _context!.RemoveChartObject(oldest);
+                    _objectNames.Remove(oldest);
+                }
+            }
         }
 
         DrawLabel(key, label, sampledPoints, color, null);
@@ -135,7 +152,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
             return points;
         }
 
-        var step = Math.Max(1, (points.Count - 1) / (MaximumPointsPerLine - 1));
+        var step = Math.Max(1, (points.Count - 1 + MaximumPointsPerLine - 2) / (MaximumPointsPerLine - 1));
         var sampled = new List<ChartTimePricePoint>();
         for (var index = 0; index < points.Count; index += step)
         {
@@ -166,6 +183,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         if (_context is null) return;
         foreach (var name in _objectNames) _context.RemoveChartObject(name);
         _objectNames.Clear();
+        _segmentNames.Clear();
         _renderedSessionDate = DateTime.MinValue;
     }
 }

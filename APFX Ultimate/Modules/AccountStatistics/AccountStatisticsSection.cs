@@ -26,7 +26,6 @@ public sealed class AccountStatisticsSection
     private int _lastHistoricalTradeCount = -1;
     private PersistedDailyDrawdown? _dailyDrawdown;
     private DateTime _dailyDrawdownDate = DateTime.MinValue;
-    private DateTime _nextDailyDrawdownFlushAt = DateTime.MinValue;
     private bool _dailyDrawdownStorageUnavailable;
 
     public AccountStatisticsSection(DateTime performanceFrom)
@@ -159,6 +158,18 @@ public sealed class AccountStatisticsSection
         }
 
         PersistDailyDrawdown(context);
+        if (!_dailyDrawdownStorageUnavailable)
+        {
+            try
+            {
+                context.FlushLocalValues();
+            }
+            catch (ArgumentException)
+            {
+                _dailyDrawdownStorageUnavailable = true;
+                context.Log("Daily drawdown persistence is unavailable; continuing with in-memory tracking.");
+            }
+        }
     }
 
     private (double Amount, double PeakBalance) GetDrawdown(StatisticsPeriod period, DateTime periodStart, StatisticsSummary summary)
@@ -183,7 +194,7 @@ public sealed class AccountStatisticsSection
             FlushDrawdownState(context);
             _dailyDrawdownDate = now.Date;
             _dailyDrawdown = LoadDailyDrawdown(context, now.Date, equity);
-            _nextDailyDrawdownFlushAt = now;
+            PersistDailyDrawdown(context);
         }
 
         var drawdown = _dailyDrawdown!.Value;
@@ -201,10 +212,9 @@ public sealed class AccountStatisticsSection
         }
 
         _dailyDrawdown = drawdown;
-        if (newMaximumDrawdown || now >= _nextDailyDrawdownFlushAt)
+        if (peakChanged || newMaximumDrawdown)
         {
             PersistDailyDrawdown(context);
-            _nextDailyDrawdownFlushAt = now.AddMinutes(1);
         }
     }
 
@@ -248,7 +258,6 @@ public sealed class AccountStatisticsSection
             context.SetLocalValue(
                 GetDailyDrawdownStorageKey(_dailyDrawdownDate),
                 string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.PeakEquity:R}|{value.MaximumDrawdown:R}"));
-            context.FlushLocalValues();
         }
         catch (ArgumentException)
         {
