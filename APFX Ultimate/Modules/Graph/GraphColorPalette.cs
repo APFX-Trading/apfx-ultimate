@@ -29,6 +29,7 @@ public static class GraphColorPalette
     public static readonly Color Vwap = Color.FromHex("#FFFF5C8A");
     public static readonly Color VwapOneDeviation = Color.FromHex("#FFFF9BBA");
     public static readonly Color VwapTwoDeviation = Color.FromHex("#FFFFC6D8");
+    public static readonly Color VwapThreeDeviation = Color.FromHex("#FFFFE0E9");
 
     public static readonly Color PreviousDayHigh = Color.FromHex("#FF4FC3F7");
     public static readonly Color PreviousDayLow = Color.FromHex("#FFFF7F96");
