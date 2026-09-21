@@ -4,24 +4,23 @@ using cAlgo.Robots;
 
 // Run with: dotnet run --project tests/GridPreview -p:AlgoPublish=false
 var fixture = new PreviewFixture();
+fixture.SeedLegacyPendingPreview();
 var module = fixture.CreateModule(GridDirection.Both);
 module.OnStart(fixture.Context);
-fixture.ExpectCount(4);
+fixture.ExpectCount(2);
 fixture.ExpectPrice("Buy.Target", 1.1022);
-fixture.ExpectPrice("Buy.Pending", 1.0982);
 fixture.ExpectPrice("Sell.Target", 1.0980);
-fixture.ExpectPrice("Sell.Pending", 1.1020);
+fixture.ExpectRightOfCandle("Buy.Target");
+fixture.ExpectRightOfCandle("Sell.Target");
 
 fixture.Market = fixture.Market with { Bid = 1.1100, Ask = 1.1102 };
 module.OnTick(fixture.Context);
-fixture.ExpectCount(4);
+fixture.ExpectCount(2);
 fixture.ExpectPrice("Buy.Target", 1.1122);
-fixture.ExpectPrice("Sell.Pending", 1.1120);
 
 fixture.Volume = fixture.Volume with { VolumeInUnits = 20000 };
 module.OnTimer(fixture.Context);
 fixture.ExpectPrice("Buy.Target", 1.1112);
-fixture.ExpectPrice("Sell.Pending", 1.1110);
 module.OnStop(fixture.Context);
 fixture.ExpectCount(0);
 
@@ -29,7 +28,7 @@ foreach (var direction in new[] { GridDirection.Buy, GridDirection.Sell })
 {
     module = fixture.CreateModule(direction);
     module.OnStart(fixture.Context);
-    fixture.ExpectCount(2);
+    fixture.ExpectCount(1);
     if (fixture.Lines.Keys.Any(key => !key.Contains($".{direction}.")))
         throw new Exception("Preview includes a disabled direction.");
     module.OnStop(fixture.Context);
@@ -46,11 +45,9 @@ module = fixture.CreateModule(GridDirection.Buy, atr: true);
 fixture.Market = fixture.Market with { AtrPips = 100 };
 module.OnStart(fixture.Context);
 fixture.ExpectPrice("Buy.Target", 1.1112);
-fixture.ExpectPrice("Buy.Pending", 1.1087); // ATR distance has a 15-unit floor.
 fixture.Market = fixture.Market with { AtrPips = 400 };
 module.OnTimer(fixture.Context);
 fixture.ExpectPrice("Buy.Target", 1.1142);
-fixture.ExpectPrice("Buy.Pending", 1.1072); // ATR distance has a 30-unit ceiling.
 
 fixture.Volume = fixture.Volume with { VolumeInUnits = 0 };
 module.OnTimer(fixture.Context);
@@ -68,7 +65,7 @@ module = fixture.CreateModule(GridDirection.Both);
 module.OnStart(fixture.Context);
 fixture.ExpectCount(0); // Panel choice survives restart with unchanged settings.
 module.SetPreviewEnabled(true);
-fixture.ExpectCount(4); // Immediate redraw without waiting for a tick.
+fixture.ExpectCount(2); // Immediate redraw without waiting for a tick.
 module.OnStop(fixture.Context);
 module = fixture.CreateModule(GridDirection.Both, previewEnabled: false);
 module.OnStart(fixture.Context);
@@ -77,7 +74,7 @@ module.SetPreviewEnabled(true);
 module.OnStop(fixture.Context);
 module = fixture.CreateModule(GridDirection.Both, previewEnabled: false);
 module.OnStart(fixture.Context);
-fixture.ExpectCount(4); // Panel override also persists when the default is off.
+fixture.ExpectCount(2); // Panel override also persists when the default is off.
 module.OnStop(fixture.Context);
 Console.WriteLine("Grid preview regression checks passed.");
 
@@ -87,6 +84,7 @@ sealed class PreviewFixture
         10000, 10000, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     public TradeVolumeInfo Volume = new(0.1, 10000, 100, 100);
     public Dictionary<string, double> Lines { get; } = new();
+    private readonly Dictionary<string, (DateTime Start, DateTime End)> _segments = new();
     private readonly HashSet<string> _labels = new();
     private readonly Dictionary<string, string> _storage = new();
     public RobotContext Context { get; }
@@ -104,6 +102,7 @@ sealed class PreviewFixture
             ["getMarketSnapshot"] = (Func<MarketSnapshot>)(() => Market),
             ["getTradeVolumeInfo"] = (Func<TradeVolumeInfo>)(() => Volume),
             ["getChartViewport"] = (Func<ChartViewport>)(() => new(time.AddHours(-2), time, 1, 2)),
+            ["getChartContextSnapshot"] = (Func<ChartContextSnapshot>)(() => new("TEST", "Minute", 1.1, 1.2, 1.0, time.AddMinutes(-1), TimeSpan.FromMinutes(1))),
             ["getChartPositions"] = (Func<TradeType, IReadOnlyList<Position>>)(_ => Array.Empty<Position>()),
             ["getDailyVolumeProfiles"] = (Func<int, int, IReadOnlyList<DailyVolumeProfile>>)((_, _) => Array.Empty<DailyVolumeProfile>()),
             ["drawChartTrendLine"] = (Action<string, DateTime, double, DateTime, double, Color, int>)((name, start, price, end, endPrice, _, _) =>
@@ -111,9 +110,10 @@ sealed class PreviewFixture
                 if (end <= start || end - start > TimeSpan.FromMinutes(15) || price != endPrice)
                     throw new Exception("Expected a short horizontal segment.");
                 Lines[name] = price;
+                _segments[name] = (start, end);
             }),
             ["drawChartText"] = (Action<string, string, DateTime, double, Color>)((name, _, _, _, _) => _labels.Add(name)),
-            ["removeChartObject"] = (Action<string>)(name => { Lines.Remove(name); _labels.Remove(name); })
+            ["removeChartObject"] = (Action<string>)(name => { Lines.Remove(name); _segments.Remove(name); _labels.Remove(name); })
         };
 
         // Fail on any unexpected service use, especially trading operations.
@@ -131,6 +131,16 @@ sealed class PreviewFixture
     public GridTradingModule CreateModule(GridDirection direction, bool enabled = true, bool atr = false, bool previewEnabled = true) =>
         new(new GridConfiguration(enabled, direction, 20, 80, 20, atr, atr, 14, 10, 0), new GridStatus(), previewEnabled);
 
+    public void SeedLegacyPendingPreview()
+    {
+        foreach (var direction in new[] { "Buy", "Sell" })
+        {
+            var name = $"APFXUltimate.Preview.{direction}.Pending";
+            Lines[name] = 1.1;
+            _labels.Add(name + ".Label");
+        }
+    }
+
     public void ExpectCount(int count)
     {
         if (Lines.Count != count || _labels.Count != count)
@@ -142,5 +152,13 @@ sealed class PreviewFixture
         var actual = Lines[$"APFXUltimate.Preview.{suffix}"];
         if (Math.Abs(actual - expected) > 1e-10)
             throw new Exception($"{suffix}: expected {expected}, got {actual}.");
+    }
+
+    public void ExpectRightOfCandle(string suffix)
+    {
+        var segment = _segments[$"APFXUltimate.Preview.{suffix}"];
+        var candleEnd = new DateTime(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc);
+        if (segment.Start <= candleEnd || segment.End - segment.Start >= TimeSpan.FromMinutes(12))
+            throw new Exception($"{suffix} must be short and to the right of the current candle.");
     }
 }

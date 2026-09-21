@@ -27,11 +27,11 @@ Each feature owns one focused responsibility and implements `IRobotModule` only 
 
 ## Chart panel
 
-When the grid is enabled and the chart symbol has no open positions, short chart lines preview the initial profit target (pink) and next grid entry (cyan) for each enabled direction. They follow the current bid/ask, normalized order volume, and target/distance settings, including ATR. Only the next entry is previewed, matching the grid's single-pending-order behavior. TP previews estimate gross profit before commission and slippage; the active basket target uses actual net profit. Previews disappear when a position opens or the bot stops.
+When the grid is enabled and the chart symbol has no open positions, short pink lines to the right of the current candle preview the initial profit target for each enabled direction. They follow the current bid/ask, normalized order volume, and target settings, including ATR scaling. TP previews estimate gross profit before commission and slippage; the active basket target uses actual net profit. Previews disappear when a position opens or the bot stops.
 
 The preview regression harness runs with `dotnet run --project tests/GridPreview -p:AlgoPublish=false` from the repository root. This disables the cTrader installation copy while testing.
 
-Use **Graph > Show Trade Preview** in bot settings to set the initial visibility, or **TP / next entry preview** in the panel's Graph section to change it immediately. Panel choices persist in instance-local storage across restarts. Changing the bot setting overrides the previously saved panel choice on the next start. The toggle only controls previews; grid trading and active basket target lines are unaffected.
+Use **Graph > Show Trade Preview** in bot settings to set the initial visibility, or **TP target preview** in the panel's Graph section to change it immediately. Panel choices persist in instance-local storage across restarts. Changing the bot setting overrides the previously saved panel choice on the next start. The toggle only controls previews; grid trading and active basket target lines are unaffected.
 
 The panel can be placed in any of nine chart positions and supports a configurable font size. Its two-column layout contains live indicators and account/grid status on the left, calendar news on the right, and full-width quick actions below.
 

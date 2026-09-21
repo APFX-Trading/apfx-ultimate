@@ -53,7 +53,7 @@ public sealed class GraphControlsSection
         section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, GraphColorPalette.PreviousDayHigh, GraphColorPalette.PreviousDayLow, GraphColorPalette.PreviousDayClose, GraphColorPalette.PreviousWeekHigh, GraphColorPalette.PreviousWeekLow, GraphColorPalette.PreviousWeekClose));
         section.AddChild(CreateOverlayToggle(_marketPulseLevelsOverlay.Label, _marketPulseLevelsOverlay.IsEnabled, _marketPulseLevelsOverlay.SetEnabled, GraphColorPalette.StrongSupport, GraphColorPalette.StrongResistance));
         section.AddChild(CreateVolumeProfileToggle());
-        section.AddChild(CreateOverlayToggle("TP / next entry preview", _gridTrading.IsPreviewEnabled, _gridTrading.SetPreviewEnabled, Color.FromHex("#FFE879F9"), Color.FromHex("#FF6FE3FF")));
+        section.AddChild(CreateOverlayToggle("TP target preview", _gridTrading.IsPreviewEnabled, _gridTrading.SetPreviewEnabled, Color.FromHex("#FFE879F9")));
         return section;
     }
 

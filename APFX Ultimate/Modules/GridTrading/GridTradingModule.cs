@@ -53,6 +53,7 @@ public sealed class GridTradingModule : IRobotModule
     public void OnStart(RobotContext context)
     {
         _context = context;
+        ClearPreviewLines(context);
         IsPreviewEnabled = _configuredPreviewEnabled;
         var saved = context.GetLocalValue(PreviewStorageKey)?.Split(':');
         if (saved is { Length: 2 }
@@ -397,39 +398,40 @@ public sealed class GridTradingModule : IRobotModule
         var volume = context.GetTradeVolumeInfo().VolumeInUnits;
         var amountPerPip = volume * snapshot.PipValue;
         var target = GetEffectiveTarget(snapshot);
-        var distance = GetEffectiveDistance(snapshot);
         if (!double.IsFinite(amountPerPip) || amountPerPip <= 0
             || !double.IsFinite(snapshot.PipSize) || snapshot.PipSize <= 0
             || !double.IsFinite(snapshot.Bid) || snapshot.Bid <= 0
             || !double.IsFinite(snapshot.Ask) || snapshot.Ask <= 0
-            || !double.IsFinite(target) || target < 0 || !double.IsFinite(distance))
+            || !double.IsFinite(target) || target < 0)
         {
             ClearPreviewLines(context);
             return;
         }
 
         var viewport = context.GetChartViewport();
+        var chartContext = context.GetChartContextSnapshot();
         var duration = viewport.EndTime - viewport.StartTime;
-        if (duration.Ticks <= 0)
+        if (duration.Ticks <= 0 || chartContext.CurrentBarOpenTime == DateTime.MinValue || chartContext.CurrentBarDuration.Ticks <= 0)
         {
             ClearPreviewLines(context);
             return;
         }
 
-        // Keep each direction in its own short section to avoid overlapping labels.
+        var candleEnd = chartContext.CurrentBarOpenTime.Add(chartContext.CurrentBarDuration);
+        var minimumLineTicks = Math.Max(1, duration.Ticks / 40);
+        var maximumLineTicks = Math.Max(minimumLineTicks, duration.Ticks / 25);
+        var lineDuration = TimeSpan.FromTicks(Math.Clamp(chartContext.CurrentBarDuration.Ticks, minimumLineTicks, maximumLineTicks));
+        var start = candleEnd.AddTicks(lineDuration.Ticks / 3);
+        var end = start.Add(lineDuration);
         foreach (var direction in GetAllowedDirections())
         {
             var isBuy = direction == TradeType.Buy;
-            var end = viewport.EndTime.AddTicks(-duration.Ticks * (isBuy ? 1 : 4) / 20);
-            var start = end.AddTicks(-duration.Ticks / 10);
             var sign = isBuy ? 1d : -1d;
             // Opening buys fill at Ask and sells at Bid. These are gross-profit
             // estimates; actual basket targets also account for incurred costs.
             var entry = isBuy ? snapshot.Ask : snapshot.Bid;
             var targetPrice = entry + sign * target / amountPerPip * snapshot.PipSize;
-            var pendingPrice = entry - sign * distance / amountPerPip * snapshot.PipSize;
             DrawPreviewLine(context, direction, "Target", $"{direction} TP ~{target:N2}", targetPrice, start, end, Color.FromHex("#FFE879F9"));
-            DrawPreviewLine(context, direction, "Pending", $"{direction} next", pendingPrice, start, end, Color.FromHex("#FF6FE3FF"));
         }
     }
 
