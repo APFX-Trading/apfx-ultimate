@@ -4,7 +4,7 @@ namespace cAlgo.Robots;
 public sealed class DailyVwapOverlayModule : IRobotModule
 {
     private const string ObjectPrefix = "APFXUltimate.Graph.Vwap.";
-    private const int MaximumPointsPerLine = 120;
+    private const int MaximumPointsPerLine = 60;
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
     private readonly HashSet<string> _objectNames = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Queue<string>> _segmentNames = new(StringComparer.Ordinal);

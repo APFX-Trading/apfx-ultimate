@@ -201,6 +201,7 @@ public partial class APFXUltimate : Robot
 
     protected override void OnStart()
     {
+        var startupStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         var gridAtr = Indicators.AverageTrueRange(GridAtrPeriod, MovingAverageType.Simple);
         var marketPulseAtr = Indicators.AverageTrueRange(GridAtrPeriod, MovingAverageType.Exponential);
         var fastEma = Indicators.MovingAverage(Bars.ClosePrices, EmaFastPeriod, MovingAverageType.Exponential);
@@ -300,7 +301,7 @@ public partial class APFXUltimate : Robot
                 .ToArray()
                 .Select(order => CancelPendingOrder(order))
                 .ToArray(),
-            getHistoricalTrades: () => History.ToArray(),
+            getHistoricalTrades: GetPerformanceTrades,
             getHistoricalTradeCount: () => History.Count,
             getAccountEquity: () => Account.Equity,
             getAccountSummary: () => new AccountSummary(Account.Balance, Account.Equity, Account.Margin, Account.FreeMargin, Account.Asset.Name, Account.BrokerName, Account.Number, Account.IsLive),
@@ -445,6 +446,8 @@ public partial class APFXUltimate : Robot
 
         _modules.Start(context);
         Timer.Start(TimeSpan.FromSeconds(1));
+        var startupMilliseconds = (System.Diagnostics.Stopwatch.GetTimestamp() - startupStartedAt) * 1000d / System.Diagnostics.Stopwatch.Frequency;
+        Print($"APFX Ultimate startup: {startupMilliseconds:N0} ms");
     }
 
     private OilInstrumentBars GetOilInstrumentBars(string label, string symbolName)
@@ -491,6 +494,13 @@ public partial class APFXUltimate : Robot
     {
         var requestedVolumeInUnits = Symbol.QuantityToVolumeInUnits(TradingVolumeLots);
         return Symbol.NormalizeVolumeInUnits(requestedVolumeInUnits, RoundingMode.Down);
+    }
+
+    private IReadOnlyList<HistoricalTrade> GetPerformanceTrades()
+    {
+        var earliest = Server.Time.AddMonths(-12);
+        if (PerformanceFrom > earliest) earliest = PerformanceFrom;
+        return History.Where(trade => trade.ClosingTime >= earliest).ToArray();
     }
 
     private void OnPositionClosed(PositionClosedEventArgs args)

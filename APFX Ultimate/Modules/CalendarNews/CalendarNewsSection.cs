@@ -7,11 +7,10 @@ public sealed class CalendarNewsSection
 {
     private const int MaximumEvents = 100;
     private const int MaximumVisibleEvents = 8;
-    // Every event can introduce a date heading, so reserve enough rows for both.
-    private const int MaximumRows = MaximumEvents * 2;
     private readonly double _fontSize;
     private readonly CalendarNewsState _state;
     private readonly List<NewsRow> _newsRows = new();
+    private Grid? _newsGrid;
     private TextBlock? _statusText;
     private int _renderedVersion = -1;
 
@@ -47,31 +46,18 @@ public sealed class CalendarNewsSection
         };
         section.AddChild(_statusText, 1, 0);
 
-        var newsGrid = new Grid(MaximumRows + 1, 6);
-        foreach (var row in newsGrid.Rows)
-        {
-            row.SetHeightToAuto();
-        }
-        AddCell(newsGrid, "When", 0, 0, true);
-        AddCell(newsGrid, "Event", 0, 1, true);
-        AddCell(newsGrid, "A", 0, 2, true);
-        AddCell(newsGrid, "F", 0, 3, true);
-        AddCell(newsGrid, "P", 0, 4, true);
-        AddCell(newsGrid, "Impact", 0, 5, true);
-        for (var row = 1; row <= MaximumRows; row++)
-        {
-            _newsRows.Add(new NewsRow(
-                AddCell(newsGrid, string.Empty, row, 0, false),
-                AddCell(newsGrid, string.Empty, row, 1, false),
-                AddCell(newsGrid, string.Empty, row, 2, false),
-                AddCell(newsGrid, string.Empty, row, 3, false),
-                AddCell(newsGrid, string.Empty, row, 4, false),
-                AddCell(newsGrid, string.Empty, row, 5, false)));
-        }
+        _newsGrid = new Grid(1, 6);
+        _newsGrid.Rows[0].SetHeightToAuto();
+        AddCell(_newsGrid, "When", 0, 0, true);
+        AddCell(_newsGrid, "Event", 0, 1, true);
+        AddCell(_newsGrid, "A", 0, 2, true);
+        AddCell(_newsGrid, "F", 0, 3, true);
+        AddCell(_newsGrid, "P", 0, 4, true);
+        AddCell(_newsGrid, "Impact", 0, 5, true);
 
         section.AddChild(new ScrollViewer
         {
-            Content = newsGrid,
+            Content = _newsGrid,
             BackgroundColor = Color.FromHex("#FF112237"),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -98,17 +84,14 @@ public sealed class CalendarNewsSection
         {
             var chartTime = context.ConvertUtcToChartTime(item.Time.UtcDateTime);
             var itemDate = DateOnly.FromDateTime(chartTime);
-            if (itemDate != previousDate && rowIndex < _newsRows.Count)
+            if (itemDate != previousDate)
             {
+                EnsureRow(rowIndex);
                 _newsRows[rowIndex].SetDate(chartTime.ToString("ddd dd MMM"));
                 rowIndex++;
             }
 
-            if (rowIndex >= _newsRows.Count)
-            {
-                break;
-            }
-
+            EnsureRow(rowIndex);
             var row = _newsRows[rowIndex];
             row.Time.Text = chartTime.ToString("HH:mm");
             row.Event.Text = $"{item.Currency} {item.Name}";
@@ -127,6 +110,22 @@ public sealed class CalendarNewsSection
         }
 
         _renderedVersion = _state.Version;
+    }
+
+    private void EnsureRow(int index)
+    {
+        while (_newsRows.Count <= index)
+        {
+            var rowIndex = _newsRows.Count + 1;
+            _newsGrid!.AddRow().SetHeightToAuto();
+            _newsRows.Add(new NewsRow(
+                AddCell(_newsGrid, string.Empty, rowIndex, 0, false),
+                AddCell(_newsGrid, string.Empty, rowIndex, 1, false),
+                AddCell(_newsGrid, string.Empty, rowIndex, 2, false),
+                AddCell(_newsGrid, string.Empty, rowIndex, 3, false),
+                AddCell(_newsGrid, string.Empty, rowIndex, 4, false),
+                AddCell(_newsGrid, string.Empty, rowIndex, 5, false)));
+        }
     }
 
     private TextBlock AddCell(Grid grid, string text, int row, int column, bool isHeader)

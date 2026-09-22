@@ -4,6 +4,16 @@ using cAlgo.Robots;
 
 var fixture = new VwapFixture();
 var overlay = new DailyVwapOverlayModule(isEnabled: true);
+fixture.PointCount = 400;
+fixture.Now = fixture.Start.AddMinutes(399);
+overlay.OnStart(fixture.Context);
+if (fixture.Objects.Count > 7 * 59 + 1)
+    throw new Exception($"VWAP drew {fixture.Objects.Count} startup objects; expected at most 414.");
+
+overlay.OnStop(fixture.Context);
+fixture.PointCount = 2;
+fixture.Now = fixture.Start.AddMinutes(1);
+overlay = new DailyVwapOverlayModule(isEnabled: true);
 overlay.OnStart(fixture.Context);
 
 for (var minute = 3; minute <= 400; minute++)
@@ -13,8 +23,8 @@ for (var minute = 3; minute <= 400; minute++)
     overlay.OnTimer(fixture.Context);
 }
 
-if (fixture.Objects.Count > 7 * 119 + 1)
-    throw new Exception($"VWAP retained {fixture.Objects.Count} chart objects; expected at most 834.");
+if (fixture.Objects.Count > 7 * 59 + 1)
+    throw new Exception($"VWAP retained {fixture.Objects.Count} chart objects; expected at most 414.");
 
 fixture.Start = fixture.Start.AddDays(1);
 fixture.Now = fixture.Start.AddMinutes(1);

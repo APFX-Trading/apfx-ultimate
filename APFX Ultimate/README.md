@@ -23,7 +23,7 @@ Each feature owns one focused responsibility and implements `IRobotModule` only 
 
 - Grid management and trading safety checks run on every tick.
 - Live panel values and indicators refresh at most four times per second.
-- Performance history is recalculated only when a closed-trade count changes or a new server day begins; otherwise it is checked on a lightweight 15-second cadence.
+- Performance history is recalculated only when a closed-trade count changes or a new server day begins; otherwise it is checked on a lightweight 15-second cadence. The timer also loads it when no market tick arrives after startup.
 
 ## Chart panel
 
@@ -36,3 +36,5 @@ Use **Graph > Show Trade Preview** in bot settings to set the initial visibility
 The panel can be placed in any of nine chart positions and supports a configurable font size. Its two-column layout contains live indicators and account/grid status on the left, calendar news on the right, and full-width quick actions below.
 
 Calendar News reads `https://apforextrading.com/api/calendar/next` asynchronously. Set **Calendar News → API Key** to an enabled key from the news system; the key is sent only as the required `x-api-key` request header. The bot refreshes the configured lookahead window every five minutes by default, validates the response before display, and shows a clear panel status if the key is absent, rejected, or the service is unavailable.
+
+On restart, recent calendar results (up to six hours old) and Treasury yields (up to 36 hours old) appear from instance-local storage while fresh requests run. Cached data is labelled as such, and expired cache entries are ignored. The three Treasury series are requested concurrently. Startup and slow module timings are printed in the cTrader log.
