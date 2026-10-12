@@ -3,9 +3,9 @@ namespace cAlgo.Robots;
 /// <summary>Manages a single, chart-symbol grid basket and adopts same-direction manual positions.</summary>
 public sealed class GridTradingModule : IRobotModule
 {
-    private const double AtrTargetAmountPerPip = 0.10;
-    private const double MinimumAtrDistanceAmount = 15.0;
-    private const double MaximumAtrDistanceAmount = 30.0;
+    private const double AtrAmountPerPip = 0.10;
+    private const double MinimumGridAmount = 15.0;
+    private const double MaximumGridAmount = 30.0;
     private const string BasketEquityStoragePrefix = "APFXUltimateGridBasketEquityV2";
     private const string TargetLineName = "APFXUltimate.Target";
     private const string LockLineName = "APFXUltimate.Lock";
@@ -18,6 +18,7 @@ public sealed class GridTradingModule : IRobotModule
     private readonly GridConfiguration _config;
     private readonly GridStatus _status;
     private bool _closingBasket;
+    private bool _closeAllSymbolPositions;
     private double _startingEquity;
     private double _highWaterProfit;
     private int _nextLevel = 1;
@@ -25,6 +26,26 @@ public sealed class GridTradingModule : IRobotModule
     private DateTime _nextVolumeProfileRefreshAt = DateTime.MinValue;
     private DailyVolumeProfile? _currentVolumeProfile;
     private bool _insufficientMarginLogged;
+    private TradingAccountIdentity? _accountIdentity;
+    private TradingAccountIdentity AccountIdentity => _accountIdentity ?? throw new InvalidOperationException("Account scope has not been initialized.");
+
+    private void EnsureAccount(RobotContext context)
+    {
+        var identity = TradingAccountIdentity.From(context.GetAccountSummary());
+        if (_accountIdentity == identity) return;
+        if (_accountIdentity is not null)
+        {
+            ClearChartLines(context);
+            ResetBasket();
+            _closingBasket = false;
+            _closeAllSymbolPositions = false;
+            _status.EntriesPlaced = 0;
+            _status.BasketProfit = 0;
+            _status.TrailingFloor = 0;
+            _status.State = _config.Enabled ? "Waiting for manual position" : "Disabled";
+        }
+        _accountIdentity = identity;
+    }
 
     public GridTradingModule(GridConfiguration config, GridStatus status, bool previewEnabled = true)
     {
@@ -52,6 +73,7 @@ public sealed class GridTradingModule : IRobotModule
 
     public void OnStart(RobotContext context)
     {
+        EnsureAccount(context);
         _context = context;
         ClearPreviewLines(context);
         IsPreviewEnabled = _configuredPreviewEnabled;
@@ -86,6 +108,7 @@ public sealed class GridTradingModule : IRobotModule
 
     public void OnTick(RobotContext context)
     {
+        EnsureAccount(context);
         var snapshot = context.GetMarketSnapshot();
         UpdateVolumeInfo(context);
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
@@ -100,25 +123,15 @@ public sealed class GridTradingModule : IRobotModule
         }
         if (_activeDirection is null)
         {
-            foreach (var direction in GetAllowedDirections())
-            {
-                var adoptedPositions = context.GetChartPositions(direction);
-                if (adoptedPositions.Count == 0) continue;
-                _activeDirection = direction;
-                _startingEquity = LoadOrCreateBasketStartingEquity(context, snapshot, direction, adoptedPositions);
-                UpdateDrawdownStatus(snapshot);
-                SynchronizePendingOrders(context, snapshot.SymbolName);
-                context.Log($"Grid adopted manual {direction} position.");
-                break;
-            }
-            if (_activeDirection is null)
+            if (!TryAdoptBasket(context, snapshot))
             {
                 UpdatePreviewLines(context, snapshot);
                 return;
             }
         }
+        if (_activeDirection is not { } activeDirection) return;
         ClearPreviewLines(context);
-        var positions = context.GetChartPositions(_activeDirection.Value);
+        var positions = context.GetChartPositions(activeDirection);
         _status.BasketProfit = positions.Sum(p => p.NetProfit);
         _status.EntriesPlaced = context.GetGridPendingOrders(LabelPrefix(snapshot.SymbolName)).Count;
         _status.State = "Active";
@@ -131,7 +144,7 @@ public sealed class GridTradingModule : IRobotModule
 
         if (HasReachedMaxDrawdown())
         {
-            BeginBasketClose(context, GetChartSymbolPositions(context), "equity drawdown limit");
+            BeginBasketClose(context, GetChartSymbolPositions(context), "equity drawdown limit", closeAllSymbolPositions: true);
             return;
         }
 
@@ -150,11 +163,14 @@ public sealed class GridTradingModule : IRobotModule
 
     public void OnTimer(RobotContext context)
     {
+        EnsureAccount(context);
         var snapshot = context.GetMarketSnapshot();
+        _status.EffectiveTarget = GetEffectiveTarget(snapshot);
+        _status.DistanceAmount = GetEffectiveDistance(snapshot);
         UpdateDrawdownStatus(snapshot);
         UpdatePreviewLines(context, snapshot);
 
-        if (!_config.Enabled || _activeDirection is null)
+        if (!_config.Enabled || (_activeDirection is null && !TryAdoptBasket(context, snapshot)))
         {
             return;
         }
@@ -167,7 +183,7 @@ public sealed class GridTradingModule : IRobotModule
 
         if (HasReachedMaxDrawdown())
         {
-            BeginBasketClose(context, GetChartSymbolPositions(context), "equity drawdown limit");
+            BeginBasketClose(context, GetChartSymbolPositions(context), "equity drawdown limit", closeAllSymbolPositions: true);
         }
     }
 
@@ -175,6 +191,22 @@ public sealed class GridTradingModule : IRobotModule
     {
         ClearChartLines(context);
         _context = null;
+    }
+
+    private bool TryAdoptBasket(RobotContext context, MarketSnapshot snapshot)
+    {
+        foreach (var direction in GetAllowedDirections())
+        {
+            var positions = context.GetChartPositions(direction);
+            if (positions.Count == 0) continue;
+            _startingEquity = LoadOrCreateBasketStartingEquity(context, snapshot, direction, positions);
+            _activeDirection = direction;
+            UpdateDrawdownStatus(snapshot);
+            SynchronizePendingOrders(context, snapshot.SymbolName);
+            context.Log($"Grid adopted manual {direction} position.");
+            return true;
+        }
+        return false;
     }
 
     private void PlaceNextLevels(RobotContext context, MarketSnapshot snapshot)
@@ -261,14 +293,14 @@ public sealed class GridTradingModule : IRobotModule
         _nextLevel = Math.Max(highestPendingLevel, highestFilledLevel) + 1;
     }
 
-    private void BeginBasketClose(RobotContext context, IReadOnlyList<Position> positions, string reason)
+    private void BeginBasketClose(RobotContext context, IReadOnlyList<Position> positions, string reason, bool closeAllSymbolPositions = false)
     {
         _closingBasket = true;
+        _closeAllSymbolPositions = closeAllSymbolPositions;
         _status.State = $"Closing: {reason}";
         ClearChartLines(context);
-        foreach (var p in positions) context.ClosePosition(p);
         CancelBasketPendingOrders(context, context.GetMarketSnapshot().SymbolName);
-        ClearBasketStartingEquity(context, context.GetMarketSnapshot().SymbolName);
+        foreach (var p in positions) context.ClosePosition(p);
         context.Log($"Grid closing: {reason}.");
     }
     private void FinishClosingBasket(RobotContext context, MarketSnapshot snapshot)
@@ -279,20 +311,26 @@ public sealed class GridTradingModule : IRobotModule
             return;
         }
 
-        var positions = context.GetChartPositions(_activeDirection.Value);
+        var positions = _closeAllSymbolPositions
+            ? GetChartSymbolPositions(context)
+            : context.GetChartPositions(_activeDirection.Value);
         var pendingOrders = context.GetGridPendingOrders(LabelPrefix(snapshot.SymbolName));
         foreach (var order in pendingOrders)
         {
             context.CancelPendingOrder(order);
         }
+        foreach (var position in positions) context.ClosePosition(position);
 
         if (positions.Count > 0 || pendingOrders.Count > 0)
         {
             return;
         }
 
+        ClearBasketStartingEquity(context, snapshot.SymbolName);
         ResetBasket();
         _closingBasket = false;
+        _closeAllSymbolPositions = false;
+        UpdateDrawdownStatus(snapshot);
         _status.EntriesPlaced = 0;
         _status.BasketProfit = 0;
         _status.TrailingFloor = 0;
@@ -316,7 +354,7 @@ public sealed class GridTradingModule : IRobotModule
     {
         var storageKey = GetBasketEquityStorageKey(snapshot.SymbolName, direction);
         if (double.TryParse(context.GetLocalValue(storageKey), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var storedEquity)
-            && storedEquity > 0)
+            && double.IsFinite(storedEquity) && storedEquity > 0)
         {
             return storedEquity;
         }
@@ -335,9 +373,8 @@ public sealed class GridTradingModule : IRobotModule
         context.FlushLocalValues();
     }
 
-    private static string GetBasketEquityStorageKey(string symbolName, TradeType direction) => BasketEquityStoragePrefix
-        + new string(symbolName.Where(char.IsLetterOrDigit).ToArray())
-        + direction;
+    private string GetBasketEquityStorageKey(string symbolName, TradeType direction) => AccountIdentity.DrawdownStorageKey(
+        BasketEquityStoragePrefix + JsonSerializer.Serialize(new { Symbol = symbolName, Direction = direction }));
     private void UpdateChartLines(RobotContext context, MarketSnapshot snapshot, IReadOnlyList<Position> positions)
     {
         var totalVolume = positions.Sum(position => position.VolumeInUnits);
@@ -417,11 +454,11 @@ public sealed class GridTradingModule : IRobotModule
             return;
         }
 
-        var candleEnd = chartContext.CurrentBarOpenTime.Add(chartContext.CurrentBarDuration);
-        var minimumLineTicks = Math.Max(1, duration.Ticks / 40);
-        var maximumLineTicks = Math.Max(minimumLineTicks, duration.Ticks / 25);
-        var lineDuration = TimeSpan.FromTicks(Math.Clamp(chartContext.CurrentBarDuration.Ticks, minimumLineTicks, maximumLineTicks));
-        var start = candleEnd.AddTicks(lineDuration.Ticks / 3);
+        var minimumLineTicks = Math.Max(1, duration.Ticks / 100);
+        var maximumLineTicks = Math.Max(minimumLineTicks, duration.Ticks / 80);
+        var lineDuration = TimeSpan.FromTicks(Math.Clamp(chartContext.CurrentBarDuration.Ticks / 2, minimumLineTicks, maximumLineTicks));
+        var gapTicks = Math.Max(1, Math.Min(chartContext.CurrentBarDuration.Ticks / 5, lineDuration.Ticks / 5));
+        var start = chartContext.CurrentBarOpenTime.AddTicks(gapTicks);
         var end = start.Add(lineDuration);
         foreach (var direction in GetAllowedDirections())
         {
@@ -453,11 +490,13 @@ public sealed class GridTradingModule : IRobotModule
         }
     }
     private double GetEffectiveTarget(MarketSnapshot snapshot) => _config.UseAtr
-        ? snapshot.AtrPips * AtrTargetAmountPerPip
+        ? GetAtrAmount(snapshot)
         : _config.TargetProfit;
     private double GetEffectiveDistance(MarketSnapshot snapshot) => _config.UseAtrDistance
-        ? Math.Clamp(snapshot.AtrPips * AtrTargetAmountPerPip, MinimumAtrDistanceAmount, MaximumAtrDistanceAmount)
-        : Math.Clamp(_config.DistanceAmount, MinimumAtrDistanceAmount, MaximumAtrDistanceAmount);
+        ? GetAtrAmount(snapshot)
+        : Math.Clamp(_config.DistanceAmount, MinimumGridAmount, MaximumGridAmount);
+    private static double GetAtrAmount(MarketSnapshot snapshot) =>
+        Math.Clamp(snapshot.AtrPips * AtrAmountPerPip, 0, MaximumGridAmount);
     private void UpdateVolumeProfileStatus(RobotContext context, MarketSnapshot snapshot)
     {
         if (context.ServerTime >= _nextVolumeProfileRefreshAt)
@@ -506,7 +545,10 @@ public sealed class GridTradingModule : IRobotModule
         // show the amount that would be available if a basket started at this moment.
         var referenceEquity = _activeDirection is null ? snapshot.Equity : _startingEquity;
         var percentageLimit = referenceEquity * Math.Max(0, _config.MaxDrawdownPercent) / 100d;
-        var allowedLoss = Math.Max(percentageLimit, Math.Max(0, _config.MaxDrawdownAmount));
+        var cashLimit = Math.Max(0, _config.MaxDrawdownAmount);
+        var allowedLoss = percentageLimit > 0 && cashLimit > 0
+            ? Math.Min(percentageLimit, cashLimit)
+            : Math.Max(percentageLimit, cashLimit);
         _status.CurrentEquity = snapshot.Equity;
         _status.StartingEquity = referenceEquity;
         _status.PercentageDrawdownLimit = percentageLimit;

@@ -125,7 +125,9 @@ public sealed class ChartPanelModule : IRobotModule
 
     public void OnTimer(RobotContext context)
     {
+        _accountStatistics?.TrackDrawdown(context);
         _accountStatistics?.RefreshIfDue(context);
+        _openPositionStatistics?.RefreshIfDue(context);
         _calendarNews?.Refresh(context);
         _treasuryYields?.Refresh(context);
         _chartContext?.RefreshIfDue(context);
@@ -164,6 +166,7 @@ public sealed class ChartPanelModule : IRobotModule
 
     private void RefreshAccountData(RobotContext context)
     {
+        _accountStatistics?.TrackDrawdown(context);
         _accountStatistics?.Refresh(context);
         _openPositionStatistics?.Refresh(context);
     }

@@ -45,9 +45,36 @@ module = fixture.CreateModule(GridDirection.Buy, atr: true);
 fixture.Market = fixture.Market with { AtrPips = 100 };
 module.OnStart(fixture.Context);
 fixture.ExpectPrice("Buy.Target", 1.1112);
+fixture.ExpectMatchingAtrAmounts(10);
+fixture.Market = fixture.Market with { AtrPips = 64 };
+module.OnTimer(fixture.Context);
+fixture.ExpectPrice("Buy.Target", 1.11084);
+fixture.ExpectMatchingAtrAmounts(6.4);
+fixture.Volume = fixture.Volume with { VolumeInUnits = 20000 };
+module.OnTimer(fixture.Context);
+fixture.ExpectPrice("Buy.Target", 1.11052);
+fixture.ExpectMatchingAtrAmounts(6.4); // Monetary ATR rule stays fixed when order volume changes.
+fixture.Volume = fixture.Volume with { VolumeInUnits = 10000 };
 fixture.Market = fixture.Market with { AtrPips = 400 };
 module.OnTimer(fixture.Context);
-fixture.ExpectPrice("Buy.Target", 1.1142);
+fixture.ExpectPrice("Buy.Target", 1.1132);
+fixture.ExpectMatchingAtrAmounts(30);
+fixture.Market = fixture.Market with { AtrPips = 250 };
+module.OnTick(fixture.Context);
+fixture.ExpectPrice("Buy.Target", 1.1127);
+fixture.ExpectMatchingAtrAmounts(25);
+module.OnStop(fixture.Context);
+module = fixture.CreateModule(GridDirection.Both, atr: true);
+foreach (var test in new[] { (0d, 0d), (64d, 6.4d), (100d, 10d), (150d, 15d), (300d, 30d), (1000d, 30d) })
+{
+    fixture.Market = fixture.Market with { AtrPips = test.Item1 };
+    module.OnStart(fixture.Context);
+    var expected = test.Item2;
+    fixture.ExpectPrice("Buy.Target", 1.1102 + expected * 0.0001);
+    fixture.ExpectPrice("Sell.Target", 1.1100 - expected * 0.0001);
+    fixture.ExpectMatchingAtrAmounts(expected);
+    module.OnStop(fixture.Context);
+}
 
 fixture.Volume = fixture.Volume with { VolumeInUnits = 0 };
 module.OnTimer(fixture.Context);
@@ -83,6 +110,7 @@ sealed class PreviewFixture
     public MarketSnapshot Market = new("TEST", 1.1000, 1.1002, 0.0001, 0.0001,
         10000, 10000, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     public TradeVolumeInfo Volume = new(0.1, 10000, 100, 100);
+    public GridStatus Status { get; private set; } = new();
     public Dictionary<string, double> Lines { get; } = new();
     private readonly Dictionary<string, (DateTime Start, DateTime End)> _segments = new();
     private readonly HashSet<string> _labels = new();
@@ -95,6 +123,7 @@ sealed class PreviewFixture
         var services = new Dictionary<string, Delegate>
         {
             ["log"] = (Action<string>)(_ => { }),
+            ["getAccountSummary"] = (Func<AccountSummary>)(() => new AccountSummary(Market.Equity, Market.Equity, 0, Market.Equity, "USD", "Test Broker", 1, false)),
             ["getLocalValue"] = (Func<string, string?>)(key => _storage.GetValueOrDefault(key)),
             ["setLocalValue"] = (Action<string, string>)((key, value) => _storage[key] = value),
             ["flushLocalValues"] = (Action)(() => { }),
@@ -128,8 +157,17 @@ sealed class PreviewFixture
         }).ToArray());
     }
 
-    public GridTradingModule CreateModule(GridDirection direction, bool enabled = true, bool atr = false, bool previewEnabled = true) =>
-        new(new GridConfiguration(enabled, direction, 20, 80, 20, atr, atr, 14, 10, 0), new GridStatus(), previewEnabled);
+    public GridTradingModule CreateModule(GridDirection direction, bool enabled = true, bool atr = false, bool previewEnabled = true)
+    {
+        Status = new GridStatus();
+        return new(new GridConfiguration(enabled, direction, 20, 80, 20, atr, atr, 14, 10, 0), Status, previewEnabled);
+    }
+
+    public void ExpectMatchingAtrAmounts(double expected)
+    {
+        if (Status.EffectiveTarget != expected || Status.DistanceAmount != expected)
+            throw new Exception($"Expected target and distance {expected}, got {Status.EffectiveTarget}/{Status.DistanceAmount}.");
+    }
 
     public void SeedLegacyPendingPreview()
     {
@@ -157,8 +195,9 @@ sealed class PreviewFixture
     public void ExpectRightOfCandle(string suffix)
     {
         var segment = _segments[$"APFXUltimate.Preview.{suffix}"];
-        var candleEnd = new DateTime(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc);
-        if (segment.Start <= candleEnd || segment.End - segment.Start >= TimeSpan.FromMinutes(12))
-            throw new Exception($"{suffix} must be short and to the right of the current candle.");
+        var candleTime = new DateTime(2026, 9, 16, 11, 59, 0, DateTimeKind.Utc);
+        if (segment.Start <= candleTime || segment.Start - candleTime > TimeSpan.FromSeconds(15)
+            || segment.End - segment.Start > TimeSpan.FromSeconds(90))
+            throw new Exception($"{suffix} must be short and immediately to the right of the current candle.");
     }
 }

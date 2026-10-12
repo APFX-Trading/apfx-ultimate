@@ -305,8 +305,8 @@ public partial class APFXUltimate : Robot
             getHistoricalTradeCount: () => History.Count,
             getAccountEquity: () => Account.Equity,
             getAccountSummary: () => new AccountSummary(Account.Balance, Account.Equity, Account.Margin, Account.FreeMargin, Account.Asset.Name, Account.BrokerName, Account.Number, Account.IsLive),
-            getLocalValue: key => LocalStorage.GetString(key),
-            setLocalValue: (key, value) => LocalStorage.SetString(key, value),
+            getLocalValue: key => LocalStorage.GetString(key, LocalStorageScope.Instance),
+            setLocalValue: (key, value) => LocalStorage.SetString(key, value, LocalStorageScope.Instance),
             flushLocalValues: () => LocalStorage.Flush(LocalStorageScope.Instance),
             getOpenPositionSnapshot: () =>
             {
@@ -498,7 +498,7 @@ public partial class APFXUltimate : Robot
 
     private IReadOnlyList<HistoricalTrade> GetPerformanceTrades()
     {
-        var earliest = Server.Time.AddMonths(-12);
+        var earliest = Server.Time.Date.AddMonths(-12);
         if (PerformanceFrom > earliest) earliest = PerformanceFrom;
         return History.Where(trade => trade.ClosingTime >= earliest).ToArray();
     }

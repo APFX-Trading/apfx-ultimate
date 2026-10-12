@@ -11,15 +11,19 @@ public sealed class AccountStatisticsSection
         new("Today", now => now.Date),
         new("Week", StartOfWeek),
         new("Month", now => new DateTime(now.Year, now.Month, 1)),
-        new("3 Months", now => now.AddMonths(-3)),
-        new("6 Months", now => now.AddMonths(-6)),
-        new("12 Months", now => now.AddMonths(-12))
+        new("3 Months", now => now.Date.AddMonths(-3)),
+        new("6 Months", now => now.Date.AddMonths(-6)),
+        new("12 Months", now => now.Date.AddMonths(-12))
     };
 
     private readonly Dictionary<string, TextBlock> _winLossCells = new();
     private readonly Dictionary<string, TextBlock> _profitLossCells = new();
     private readonly Dictionary<string, TextBlock> _drawdownCells = new();
     private readonly Dictionary<string, TickDrawdownWindow> _tickDrawdownWindows = new();
+    private readonly SortedDictionary<DateTime, PersistedDailyDrawdown> _dailyHistory = new();
+    private HistoricalTrade[] _historicalTrades = Array.Empty<HistoricalTrade>();
+    private bool _historyLoaded;
+    private TickDrawdownWindow? _partialDayWindow;
     private readonly DateTime _performanceFrom;
     private DateTime _nextRefreshAt = DateTime.MinValue;
     private DateTime _lastStatisticsDate = DateTime.MinValue;
@@ -27,6 +31,28 @@ public sealed class AccountStatisticsSection
     private PersistedDailyDrawdown? _dailyDrawdown;
     private DateTime _dailyDrawdownDate = DateTime.MinValue;
     private bool _dailyDrawdownStorageUnavailable;
+    private TradingAccountIdentity? _accountIdentity;
+    private TradingAccountIdentity AccountIdentity => _accountIdentity ?? throw new InvalidOperationException("Account scope has not been initialized.");
+
+    private void EnsureAccount(RobotContext context)
+    {
+        var identity = TradingAccountIdentity.From(context.GetAccountSummary());
+        if (_accountIdentity == identity) return;
+        // Flush under the previous identity before discarding its in-memory curve.
+        FlushDrawdownState(context);
+        _accountIdentity = identity;
+        _tickDrawdownWindows.Clear();
+        _dailyHistory.Clear();
+        _historicalTrades = Array.Empty<HistoricalTrade>();
+        _historyLoaded = false;
+        _partialDayWindow = null;
+        _dailyDrawdown = null;
+        _dailyDrawdownDate = DateTime.MinValue;
+        _dailyDrawdownStorageUnavailable = false;
+        _nextRefreshAt = DateTime.MinValue;
+        _lastStatisticsDate = DateTime.MinValue;
+        _lastHistoricalTradeCount = -1;
+    }
 
     public AccountStatisticsSection(DateTime performanceFrom)
     {
@@ -73,6 +99,7 @@ public sealed class AccountStatisticsSection
 
     public void RefreshIfDue(RobotContext context)
     {
+        EnsureAccount(context);
         var now = context.ServerTime;
         if (now < _nextRefreshAt)
         {
@@ -80,12 +107,6 @@ public sealed class AccountStatisticsSection
         }
 
         var historicalTradeCount = context.GetHistoricalTradeCount();
-        if (historicalTradeCount == _lastHistoricalTradeCount && now.Date == _lastStatisticsDate.Date)
-        {
-            _nextRefreshAt = now.AddSeconds(15);
-            return;
-        }
-
         Refresh(context, historicalTradeCount);
     }
 
@@ -96,15 +117,17 @@ public sealed class AccountStatisticsSection
 
     private void Refresh(RobotContext context, int historicalTradeCount)
     {
+        EnsureAccount(context);
         var now = context.ServerTime;
-        var historicalTrades = context.GetHistoricalTrades()
-            .OrderBy(trade => trade.ClosingTime)
-            .ToArray();
+        if (historicalTradeCount != _lastHistoricalTradeCount || now.Date != _lastStatisticsDate.Date)
+        {
+            _historicalTrades = context.GetHistoricalTrades().OrderBy(trade => trade.ClosingTime).ToArray();
+        }
 
         foreach (var period in Periods)
         {
             var periodStart = GetEffectivePeriodStart(period, now);
-            var summary = Summarize(historicalTrades, periodStart, now);
+            var summary = Summarize(_historicalTrades, periodStart, now);
             var drawdown = GetDrawdown(period, periodStart, summary);
             _winLossCells[period.Name].Text = FormatWinLoss(summary);
             _profitLossCells[period.Name].Text = FormatProfitLoss(summary.NetProfit, summary.StartingBalance);
@@ -125,19 +148,43 @@ public sealed class AccountStatisticsSection
 
     /// <summary>
     /// Records the high-water mark and maximum equity drop for each visible period.
-    /// This is intentionally in-memory only and runs in constant time on every tick.
+    /// Daily equity summaries are persisted; tick windows handle intraday cutoffs.
     /// </summary>
     public void TrackDrawdown(RobotContext context)
     {
+        EnsureAccount(context);
         var now = context.ServerTime;
         var equity = context.GetAccountEquity();
+        if (!double.IsFinite(equity)) return;
+        if (!_historyLoaded)
+        {
+            for (var date = now.Date.AddMonths(-12); date < now.Date; date = date.AddDays(1))
+            {
+                if (LoadDailyDrawdown(context, date) is { } saved) _dailyHistory[date] = saved;
+            }
+            _historyLoaded = true;
+        }
         TrackPersistedDailyDrawdown(context, now, equity);
+        if (_performanceFrom.TimeOfDay != TimeSpan.Zero && _performanceFrom <= now && _performanceFrom >= now.Date.AddMonths(-12))
+        {
+            var key = "APFXUltimateDrawdownFrom" + _performanceFrom.ToString("yyyyMMddHHmmssfffffff", System.Globalization.CultureInfo.InvariantCulture);
+            var initialize = _partialDayWindow is null;
+            _partialDayWindow ??= new TickDrawdownWindow(_performanceFrom, equity, LoadDailyDrawdown(context, _performanceFrom.Date, key));
+            var before = _partialDayWindow.State;
+            _partialDayWindow.Observe(equity);
+            if (initialize || before != _partialDayWindow.State) PersistDailyDrawdown(context, key, _partialDayWindow.State);
+        }
         foreach (var period in Periods)
         {
             var periodStart = GetEffectivePeriodStart(period, now);
             if (periodStart > now)
             {
                 _tickDrawdownWindows.Remove(period.Name);
+                continue;
+            }
+            if (periodStart == _performanceFrom && _partialDayWindow is not null)
+            {
+                _tickDrawdownWindows[period.Name] = _partialDayWindow;
                 continue;
             }
             if (!_tickDrawdownWindows.TryGetValue(period.Name, out var window) || window.PeriodStart != periodStart)
@@ -174,17 +221,22 @@ public sealed class AccountStatisticsSection
 
     private (double Amount, double PeakBalance) GetDrawdown(StatisticsPeriod period, DateTime periodStart, StatisticsSummary summary)
     {
-        if (period.Name == "Today" && _performanceFrom <= periodStart && _dailyDrawdown is { } persisted && persisted.MaximumDrawdown > summary.MaximumDrawdown)
+        var result = (Amount: summary.MaximumDrawdown, PeakBalance: summary.PeakBalance);
+        var peak = double.NegativeInfinity;
+        foreach (var entry in _dailyHistory)
         {
-            return (persisted.MaximumDrawdown, persisted.PeakEquity);
+            // A whole-day summary cannot safely represent a partial first day.
+            if (entry.Key < periodStart || entry.Key > _dailyDrawdownDate) continue;
+            var day = entry.Value;
+            var crossDayDrop = peak - day.MinimumEquity;
+            if (crossDayDrop > result.Amount) result = (crossDayDrop, peak);
+            if (day.MaximumDrawdown > result.Amount) result = (day.MaximumDrawdown, day.PeakAtMaximumDrawdown);
+            if (result.Amount == 0 && day.PeakEquity > result.PeakBalance) result.PeakBalance = day.PeakEquity;
+            peak = Math.Max(peak, day.PeakEquity);
         }
-
-        if (!_tickDrawdownWindows.TryGetValue(period.Name, out var tickDrawdown) || tickDrawdown.MaximumDrawdown <= summary.MaximumDrawdown)
-        {
-            return (summary.MaximumDrawdown, summary.PeakBalance);
-        }
-
-        return (tickDrawdown.MaximumDrawdown, tickDrawdown.PeakEquity);
+        if (_tickDrawdownWindows.TryGetValue(period.Name, out var window) && window.MaximumDrawdown > result.Amount)
+            result = (window.MaximumDrawdown, window.PeakAtMaximumDrawdown);
+        return result;
     }
 
     private void TrackPersistedDailyDrawdown(RobotContext context, DateTime now, double equity)
@@ -193,7 +245,9 @@ public sealed class AccountStatisticsSection
         {
             FlushDrawdownState(context);
             _dailyDrawdownDate = now.Date;
-            _dailyDrawdown = LoadDailyDrawdown(context, now.Date, equity);
+            _dailyDrawdown = LoadDailyDrawdown(context, now.Date) ?? new PersistedDailyDrawdown(equity, 0, equity, equity);
+            foreach (var expired in _dailyHistory.Keys.Where(date => date < now.Date.AddMonths(-12)).ToArray())
+                _dailyHistory.Remove(expired);
             PersistDailyDrawdown(context);
         }
 
@@ -204,35 +258,46 @@ public sealed class AccountStatisticsSection
             drawdown = drawdown with { PeakEquity = equity };
         }
 
+        var minimumChanged = equity < drawdown.MinimumEquity;
+        drawdown = drawdown with { MinimumEquity = Math.Min(drawdown.MinimumEquity, equity) };
         var maximumDrawdown = Math.Max(drawdown.MaximumDrawdown, drawdown.PeakEquity - equity);
         var newMaximumDrawdown = maximumDrawdown > drawdown.MaximumDrawdown;
         if (newMaximumDrawdown)
         {
-            drawdown = drawdown with { MaximumDrawdown = maximumDrawdown };
+            drawdown = drawdown with { MaximumDrawdown = maximumDrawdown, PeakAtMaximumDrawdown = drawdown.PeakEquity };
         }
 
         _dailyDrawdown = drawdown;
-        if (peakChanged || newMaximumDrawdown)
+        _dailyHistory[now.Date] = drawdown;
+        if (peakChanged || newMaximumDrawdown || minimumChanged)
         {
             PersistDailyDrawdown(context);
         }
     }
 
-    private PersistedDailyDrawdown LoadDailyDrawdown(RobotContext context, DateTime date, double equity)
+    private PersistedDailyDrawdown? LoadDailyDrawdown(RobotContext context, DateTime date, string? storageKey = null)
     {
+        if (_dailyDrawdownStorageUnavailable) return null;
         try
         {
-            var value = context.GetLocalValue(GetDailyDrawdownStorageKey(date));
+            var value = context.GetLocalValue(AccountIdentity.DrawdownStorageKey(storageKey ?? GetDailyDrawdownStorageKey(date)));
             if (value is not null)
             {
                 var parts = value.Split('|');
-                if (parts.Length == 2
+                if ((parts.Length == 2 || parts.Length == 4)
                     && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var peakEquity)
                     && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var maximumDrawdown)
-                    && peakEquity > 0
+                    && double.IsFinite(peakEquity) && double.IsFinite(maximumDrawdown)
                     && maximumDrawdown >= 0)
                 {
-                    return new PersistedDailyDrawdown(Math.Max(peakEquity, equity), maximumDrawdown);
+                    // Legacy records lack the original loss peak and daily low.
+                    if (parts.Length == 2)
+                        return new PersistedDailyDrawdown(peakEquity, maximumDrawdown, peakEquity, peakEquity - maximumDrawdown);
+                    if (double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lossPeak)
+                        && double.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var low)
+                        && double.IsFinite(lossPeak) && double.IsFinite(low)
+                        && lossPeak <= peakEquity && low <= peakEquity)
+                        return new PersistedDailyDrawdown(peakEquity, maximumDrawdown, lossPeak, low);
                 }
             }
         }
@@ -242,22 +307,24 @@ public sealed class AccountStatisticsSection
             context.Log("Daily drawdown persistence is unavailable; continuing with in-memory tracking.");
         }
 
-        return new PersistedDailyDrawdown(equity, 0);
+        return null;
     }
 
     private void PersistDailyDrawdown(RobotContext context)
+        => PersistDailyDrawdown(context, GetDailyDrawdownStorageKey(_dailyDrawdownDate), _dailyDrawdown!.Value);
+
+    private void PersistDailyDrawdown(RobotContext context, string key, PersistedDailyDrawdown value)
     {
         if (_dailyDrawdownStorageUnavailable)
         {
             return;
         }
 
-        var value = _dailyDrawdown!.Value;
         try
         {
             context.SetLocalValue(
-                GetDailyDrawdownStorageKey(_dailyDrawdownDate),
-                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.PeakEquity:R}|{value.MaximumDrawdown:R}"));
+                AccountIdentity.DrawdownStorageKey(key),
+                string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.PeakEquity:R}|{value.MaximumDrawdown:R}|{value.PeakAtMaximumDrawdown:R}|{value.MinimumEquity:R}"));
         }
         catch (ArgumentException)
         {
@@ -382,29 +449,40 @@ public sealed class AccountStatisticsSection
     private sealed record StatisticsPeriod(string Name, Func<DateTime, DateTime> StartAt);
 
     private readonly record struct StatisticsSummary(int Wins, int Losses, double NetProfit, double StartingBalance, double MaximumDrawdown, double PeakBalance);
-    private readonly record struct PersistedDailyDrawdown(double PeakEquity, double MaximumDrawdown);
+    private readonly record struct PersistedDailyDrawdown(double PeakEquity, double MaximumDrawdown, double PeakAtMaximumDrawdown, double MinimumEquity);
 
     private sealed class TickDrawdownWindow
     {
-        public TickDrawdownWindow(DateTime periodStart, double initialEquity)
+        public TickDrawdownWindow(DateTime periodStart, double initialEquity, PersistedDailyDrawdown? saved = null)
         {
             PeriodStart = periodStart;
-            PeakEquity = initialEquity;
+            PeakEquity = saved?.PeakEquity ?? initialEquity;
+            MaximumDrawdown = saved?.MaximumDrawdown ?? 0;
+            PeakAtMaximumDrawdown = saved?.PeakAtMaximumDrawdown ?? initialEquity;
+            MinimumEquity = saved?.MinimumEquity ?? initialEquity;
         }
 
         public DateTime PeriodStart { get; }
         public double PeakEquity { get; private set; }
         public double MaximumDrawdown { get; private set; }
+        public double PeakAtMaximumDrawdown { get; private set; }
+        private double MinimumEquity { get; set; }
+        public PersistedDailyDrawdown State => new(PeakEquity, MaximumDrawdown, PeakAtMaximumDrawdown, MinimumEquity);
 
         public void Observe(double equity)
         {
+            MinimumEquity = Math.Min(MinimumEquity, equity);
             if (equity > PeakEquity)
             {
                 PeakEquity = equity;
                 return;
             }
 
-            MaximumDrawdown = Math.Max(MaximumDrawdown, PeakEquity - equity);
+            if (PeakEquity - equity > MaximumDrawdown)
+            {
+                MaximumDrawdown = PeakEquity - equity;
+                PeakAtMaximumDrawdown = PeakEquity;
+            }
         }
     }
 }
