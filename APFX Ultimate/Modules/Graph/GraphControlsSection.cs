@@ -49,7 +49,7 @@ public sealed class GraphControlsSection
         }
         section.AddChild(CreateEmaToggle());
         section.AddChild(CreateBollingerBandsToggle());
-        section.AddChild(CreateOverlayToggle(_dailyVwapOverlay.Label, _dailyVwapOverlay.IsEnabled, _dailyVwapOverlay.SetEnabled, GraphColorPalette.Vwap, GraphColorPalette.VwapOneDeviation, GraphColorPalette.VwapTwoDeviation, GraphColorPalette.VwapThreeDeviation));
+        section.AddChild(CreateOverlayToggle(_dailyVwapOverlay.Label, _dailyVwapOverlay.IsEnabled, _dailyVwapOverlay.SetEnabled, GraphColorPalette.Vwap, GraphColorPalette.VwapOneDeviation, GraphColorPalette.VwapTwoDeviation, GraphColorPalette.VwapThreeDeviation, GraphColorPalette.VwapFourDeviation));
         section.AddChild(CreateOverlayToggle(_previousPeriodLevelsOverlay.Label, _previousPeriodLevelsOverlay.IsEnabled, _previousPeriodLevelsOverlay.SetEnabled, GraphColorPalette.PreviousDayHigh, GraphColorPalette.PreviousDayLow, GraphColorPalette.PreviousDayClose, GraphColorPalette.PreviousWeekHigh, GraphColorPalette.PreviousWeekLow, GraphColorPalette.PreviousWeekClose));
         section.AddChild(CreateOverlayToggle(_marketPulseLevelsOverlay.Label, _marketPulseLevelsOverlay.IsEnabled, _marketPulseLevelsOverlay.SetEnabled, GraphColorPalette.StrongSupport, GraphColorPalette.StrongResistance));
         section.AddChild(CreateVolumeProfileToggle());

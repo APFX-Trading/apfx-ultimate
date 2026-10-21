@@ -1,6 +1,6 @@
 namespace cAlgo.Robots;
 
-/// <summary>Renders the daily VWAP and its first three deviation bands on the main chart.</summary>
+/// <summary>Renders the daily VWAP and its first four deviation bands on the main chart.</summary>
 public sealed class DailyVwapOverlayModule : IRobotModule
 {
     private const string ObjectPrefix = "APFXUltimate.Graph.Vwap.";
@@ -15,7 +15,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     public DailyVwapOverlayModule(bool isEnabled) => IsEnabled = isEnabled;
 
     public string Name => nameof(DailyVwapOverlayModule);
-    public string Label => "Daily VWAP  +/-1 / +/-2 / +/-3 SD";
+    public string Label => "Daily VWAP  +/-1 / +/-2 / +/-3 / +/-4 SD";
     public bool IsEnabled { get; private set; }
 
     public void OnStart(RobotContext context)
@@ -77,6 +77,8 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         DrawFullLine("LowerTwo", data.LowerTwo, GraphColorPalette.VwapTwoDeviation, 1, null, activeNames);
         DrawFullLine("UpperThree", data.UpperThree, GraphColorPalette.VwapThreeDeviation, 1, null, activeNames);
         DrawFullLine("LowerThree", data.LowerThree, GraphColorPalette.VwapThreeDeviation, 1, null, activeNames);
+        DrawFullLine("UpperFour", data.UpperFour, GraphColorPalette.VwapFourDeviation, 1, null, activeNames);
+        DrawFullLine("LowerFour", data.LowerFour, GraphColorPalette.VwapFourDeviation, 1, null, activeNames);
         RemoveStaleObjects(activeNames);
     }
 
@@ -89,6 +91,8 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         DrawLatestSegment("LowerTwo", data.LowerTwo, GraphColorPalette.VwapTwoDeviation, 1, null);
         DrawLatestSegment("UpperThree", data.UpperThree, GraphColorPalette.VwapThreeDeviation, 1, null);
         DrawLatestSegment("LowerThree", data.LowerThree, GraphColorPalette.VwapThreeDeviation, 1, null);
+        DrawLatestSegment("UpperFour", data.UpperFour, GraphColorPalette.VwapFourDeviation, 1, null);
+        DrawLatestSegment("LowerFour", data.LowerFour, GraphColorPalette.VwapFourDeviation, 1, null);
     }
 
     private void DrawFullLine(string key, IReadOnlyList<ChartTimePricePoint> points, Color color, int thickness, string? label, HashSet<string> activeNames)

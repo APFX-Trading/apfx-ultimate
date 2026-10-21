@@ -29,6 +29,8 @@ public static class DailyVwapCalculator
         var lowerTwo = new List<ChartTimePricePoint>();
         var upperThree = new List<ChartTimePricePoint>();
         var lowerThree = new List<ChartTimePricePoint>();
+        var upperFour = new List<ChartTimePricePoint>();
+        var lowerFour = new List<ChartTimePricePoint>();
         double weightedPrice = 0;
         double weightedPriceSquared = 0;
         double totalVolume = 0;
@@ -56,8 +58,10 @@ public static class DailyVwapCalculator
             lowerTwo.Add(new ChartTimePricePoint(time, average - 2 * deviation));
             upperThree.Add(new ChartTimePricePoint(time, average + 3 * deviation));
             lowerThree.Add(new ChartTimePricePoint(time, average - 3 * deviation));
+            upperFour.Add(new ChartTimePricePoint(time, average + 4 * deviation));
+            lowerFour.Add(new ChartTimePricePoint(time, average - 4 * deviation));
         }
 
-        return new DailyVwapData(vwap, upperOne, lowerOne, upperTwo, lowerTwo, upperThree, lowerThree);
+        return new DailyVwapData(vwap, upperOne, lowerOne, upperTwo, lowerTwo, upperThree, lowerThree, upperFour, lowerFour);
     }
 }

@@ -7,8 +7,9 @@ var overlay = new DailyVwapOverlayModule(isEnabled: true);
 fixture.PointCount = 400;
 fixture.Now = fixture.Start.AddMinutes(399);
 overlay.OnStart(fixture.Context);
-if (fixture.Objects.Count > 7 * 59 + 1)
-    throw new Exception($"VWAP drew {fixture.Objects.Count} startup objects; expected at most 414.");
+if (fixture.Objects.Count > 9 * 59 + 1)
+    throw new Exception($"VWAP drew {fixture.Objects.Count} startup objects; expected at most 532.");
+fixture.AssertFourthBands();
 
 overlay.OnStop(fixture.Context);
 fixture.PointCount = 2;
@@ -23,15 +24,23 @@ for (var minute = 3; minute <= 400; minute++)
     overlay.OnTimer(fixture.Context);
 }
 
-if (fixture.Objects.Count > 7 * 59 + 1)
-    throw new Exception($"VWAP retained {fixture.Objects.Count} chart objects; expected at most 414.");
+if (fixture.Objects.Count > 9 * 59 + 1)
+    throw new Exception($"VWAP retained {fixture.Objects.Count} chart objects; expected at most 532.");
+fixture.AssertFourthBands();
 
 fixture.Start = fixture.Start.AddDays(1);
 fixture.Now = fixture.Start.AddMinutes(1);
 fixture.PointCount = 2;
 overlay.OnTimer(fixture.Context);
-if (fixture.Objects.Count != 8)
+if (fixture.Objects.Count != 10)
     throw new Exception($"VWAP retained stale objects after the session changed: {fixture.Objects.Count}.");
+fixture.AssertFourthBands();
+
+overlay.SetEnabled(false);
+if (fixture.Objects.Count != 0)
+    throw new Exception("Disabling VWAP must remove all bands.");
+overlay.SetEnabled(true);
+fixture.AssertFourthBands();
 
 overlay.OnStop(fixture.Context);
 if (fixture.Objects.Count != 0)
@@ -45,6 +54,7 @@ sealed class VwapFixture
     public DateTime Now;
     public int PointCount = 2;
     public HashSet<string> Objects { get; } = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _endPrices = new(StringComparer.Ordinal);
     public RobotContext Context { get; }
 
     public VwapFixture()
@@ -56,9 +66,9 @@ sealed class VwapFixture
             ["getServerTime"] = (Func<DateTime>)(() => Now),
             ["getDailyVwapData"] = (Func<DailyVwapData>)GetData,
             ["getChartViewport"] = (Func<ChartViewport>)(() => new(Start, Now, 1, 2)),
-            ["drawChartTrendLine"] = (Action<string, DateTime, double, DateTime, double, Color, int>)((name, _, _, _, _, _, _) => Objects.Add(name)),
+            ["drawChartTrendLine"] = (Action<string, DateTime, double, DateTime, double, Color, int>)((name, _, _, _, endPrice, _, _) => { Objects.Add(name); _endPrices[name] = endPrice; }),
             ["drawChartText"] = (Action<string, string, DateTime, double, Color>)((name, _, _, _, _) => Objects.Add(name)),
-            ["removeChartObject"] = (Action<string>)(name => Objects.Remove(name))
+            ["removeChartObject"] = (Action<string>)(name => { Objects.Remove(name); _endPrices.Remove(name); })
         };
 
         var constructor = typeof(RobotContext).GetConstructors().Single();
@@ -78,6 +88,17 @@ sealed class VwapFixture
             .Select(index => new ChartTimePricePoint(Start.AddMinutes(index), 1.1 + offset + index * 0.00001))
             .ToArray();
 
-        return new DailyVwapData(Band(0), Band(0.001), Band(-0.001), Band(0.002), Band(-0.002), Band(0.003), Band(-0.003));
+        return new DailyVwapData(Band(0), Band(0.001), Band(-0.001), Band(0.002), Band(-0.002), Band(0.003), Band(-0.003), Band(0.004), Band(-0.004));
+    }
+
+    public void AssertFourthBands()
+    {
+        foreach (var (key, offset) in new[] { ("UpperFour", 0.004), ("LowerFour", -0.004) })
+        {
+            var points = _endPrices.Where(pair => pair.Key.Contains($".{key}.")).ToArray();
+            var expected = 1.1 + offset + (PointCount - 1) * 0.00001;
+            if (points.Length == 0 || !points.Any(pair => Math.Abs(pair.Value - expected) < 1e-12))
+                throw new Exception($"{key} was not rendered at the current fourth-band price.");
+        }
     }
 }
