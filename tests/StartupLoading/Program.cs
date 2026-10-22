@@ -19,6 +19,32 @@ var items = new[]
 newsState.SetItems(items, DateTimeOffset.UtcNow, DateTime.UtcNow);
 newsSection.Refresh(fixture.Context);
 ExpectNewsRows(newsSection, 3); // One date heading and two events.
+ExpectActualText(newsSection, 1, "-");
+
+// A released value must replace the placeholder in existing controls, including zero.
+var releaseResponse = JsonSerializer.Serialize(new
+{
+    items = items.Select((item, index) => new
+    {
+        time = item.Time,
+        @event = new { currency = item.Currency, name = item.Name, importance = item.Importance },
+        actual = index == 0 ? JsonSerializer.SerializeToElement(0) : JsonSerializer.SerializeToElement("-0.1"),
+        forecast = item.Forecast,
+        previous = item.Previous
+    })
+});
+var parseItems = typeof(CalendarNewsModule).GetMethod("ParseItems", BindingFlags.NonPublic | BindingFlags.Static)
+    ?? throw new Exception("Calendar parser was not found.");
+var releasedItems = parseItems.Invoke(null, new object[] { releaseResponse }) as IReadOnlyList<CalendarNewsItem>
+    ?? throw new Exception("Calendar parser did not return items.");
+if (releasedItems.Count != 2 || releasedItems[0].Actual != "0" || releasedItems[1].Actual != "-0.1"
+    || releasedItems[0].Forecast != "1.0" || releasedItems[0].Previous != "0.9")
+    throw new Exception("Released calendar results were not parsed correctly.");
+newsState.SetItems(releasedItems, DateTimeOffset.UtcNow, DateTime.UtcNow);
+newsSection.Refresh(fixture.Context);
+ExpectNewsRows(newsSection, 3);
+ExpectActualText(newsSection, 1, "0");
+ExpectActualText(newsSection, 2, "-0.1");
 
 fixture.Store("APFXUltimateCalendarNewsCacheV1", JsonSerializer.Serialize(new
 {
@@ -79,6 +105,15 @@ static void ExpectNewsRows(CalendarNewsSection section, int expected)
     var rows = typeof(CalendarNewsSection).GetField("_newsRows", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(section) as System.Collections.ICollection;
     if (rows?.Count != expected)
         throw new Exception($"Expected {expected} allocated calendar rows, got {rows?.Count}.");
+}
+
+static void ExpectActualText(CalendarNewsSection section, int rowIndex, string expected)
+{
+    var rows = typeof(CalendarNewsSection).GetField("_newsRows", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(section) as System.Collections.IList;
+    var row = rows?[rowIndex] ?? throw new Exception("Expected a calendar event row.");
+    var actual = row.GetType().GetProperty("Actual")?.GetValue(row) as TextBlock;
+    if (actual?.Text != expected)
+        throw new Exception($"Expected calendar actual '{expected}', got '{actual?.Text}'.");
 }
 
 sealed class StartupFixture
