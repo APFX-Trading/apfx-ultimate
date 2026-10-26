@@ -393,7 +393,8 @@ public sealed class GridTradingModule : IRobotModule
         var hasTrailingLock = _status.TrailingFloor > 0;
         var targetPrice = GetProfitPrice(currentPrice, _status.EffectiveTarget, direction, currentProfit, totalVolume, snapshot);
         context.DrawHorizontalLine(TargetLineName, targetPrice, Color.FromHex("#FFE879F9"));
-        var targetLabelTime = hasTrailingLock ? viewport.EndTime.AddTicks(-labelDuration.Ticks / 4) : viewport.EndTime;
+        // Offset slightly from the right edge to clear the VWAP labels.
+        var targetLabelTime = viewport.EndTime.AddTicks(-labelDuration.Ticks / 8);
         context.DrawChartText(TargetLabelName, $"Target ${_status.EffectiveTarget:N2}", targetLabelTime, targetPrice, Color.FromHex("#FFE879F9"));
 
         if (hasTrailingLock)
