@@ -433,8 +433,8 @@ public sealed class AccountStatisticsSection
         var absoluteValue = Math.Abs(value);
         return absoluteValue switch
         {
-            >= 1_000_000 => $"{value / 1_000_000d:0.0}m",
-            >= 1_000 => $"{value / 1_000d:0.0}k",
+            >= 1_000_000 => $"{Math.Floor(value / 10_000d) / 100d:0.##}m",
+            >= 1_000 => $"{Math.Floor(value / 10d) / 100d:0.##}k",
             _ => value.ToString("N2")
         };
     }
