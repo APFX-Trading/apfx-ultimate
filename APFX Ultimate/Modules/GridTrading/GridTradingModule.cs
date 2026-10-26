@@ -97,7 +97,7 @@ public sealed class GridTradingModule : IRobotModule
         _status.MaxDrawdownAmount = _config.MaxDrawdownAmount;
         var snapshot = context.GetMarketSnapshot();
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
-        _status.DistanceAmount = GetEffectiveDistance(snapshot);
+        _status.DistanceAmount = GetEffectiveDistance(context, snapshot);
         UpdateVolumeProfileStatus(context, snapshot);
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
@@ -112,7 +112,7 @@ public sealed class GridTradingModule : IRobotModule
         var snapshot = context.GetMarketSnapshot();
         UpdateVolumeInfo(context);
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
-        _status.DistanceAmount = GetEffectiveDistance(snapshot);
+        _status.DistanceAmount = GetEffectiveDistance(context, snapshot);
         UpdateVolumeProfileStatus(context, snapshot);
         UpdateDrawdownStatus(snapshot);
         if (!_config.Enabled) return;
@@ -166,7 +166,7 @@ public sealed class GridTradingModule : IRobotModule
         EnsureAccount(context);
         var snapshot = context.GetMarketSnapshot();
         _status.EffectiveTarget = GetEffectiveTarget(snapshot);
-        _status.DistanceAmount = GetEffectiveDistance(snapshot);
+        _status.DistanceAmount = GetEffectiveDistance(context, snapshot);
         UpdateDrawdownStatus(snapshot);
         UpdatePreviewLines(context, snapshot);
 
@@ -216,8 +216,9 @@ public sealed class GridTradingModule : IRobotModule
 
         var info = context.GetTradeVolumeInfo();
         var margin = _activeDirection!.Value == TradeType.Buy ? info.BuyEstimatedMargin : info.SellEstimatedMargin;
-        var pips = GetEffectiveDistance(snapshot) / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue);
         var positions = context.GetChartPositions(_activeDirection.Value);
+        _status.DistanceAmount = GetEffectiveDistance(snapshot, positions.Count, info.VolumeInUnits);
+        var pips = _status.DistanceAmount / Math.Max(0.00000001, info.VolumeInUnits * snapshot.PipValue);
         // Keep a single next-level order. Once it fills, the next tick adds the following level.
         // This removes an artificial position cap without flooding the account with pending orders.
         if (existing.Length > 0)
@@ -492,9 +493,25 @@ public sealed class GridTradingModule : IRobotModule
     private double GetEffectiveTarget(MarketSnapshot snapshot) => _config.UseAtr
         ? GetAtrAmount(snapshot)
         : _config.TargetProfit;
-    private double GetEffectiveDistance(MarketSnapshot snapshot) => _config.UseAtrDistance
-        ? GetAtrAmount(snapshot)
-        : Math.Clamp(_config.DistanceAmount, MinimumGridAmount, MaximumGridAmount);
+    private double GetEffectiveDistance(MarketSnapshot snapshot, int entryCount, double volumeInUnits)
+    {
+        var baseAmount = _config.UseAtrDistance
+            ? Math.Max(MinimumGridAmount, GetAtrAmount(snapshot))
+            : Math.Clamp(_config.DistanceAmount, MinimumGridAmount, MaximumGridAmount);
+        // The initial manual entry counts toward the threshold. After that, add
+        // 1x, 2x, 3x... the pip increment on top of the current ATR or fixed base gap.
+        var increments = Math.Max(0, (long)entryCount - Math.Max(1, _config.InitialEntries) + 1);
+        var progressiveAmount = increments * Math.Max(0, _config.DistanceIncrementPips)
+            * volumeInUnits * snapshot.PipValue;
+        return baseAmount + progressiveAmount;
+    }
+    private double GetEffectiveDistance(RobotContext context, MarketSnapshot snapshot)
+    {
+        var count = _activeDirection is { } direction ? context.GetChartPositions(direction).Count : 0;
+        var volume = count >= Math.Max(1, _config.InitialEntries) && _config.DistanceIncrementPips > 0
+            ? context.GetTradeVolumeInfo().VolumeInUnits : 0;
+        return GetEffectiveDistance(snapshot, count, volume);
+    }
     private static double GetAtrAmount(MarketSnapshot snapshot) =>
         Math.Clamp(snapshot.AtrPips * AtrAmountPerPip, 0, MaximumGridAmount);
     private void UpdateVolumeProfileStatus(RobotContext context, MarketSnapshot snapshot)

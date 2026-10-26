@@ -26,6 +26,10 @@ public partial class APFXUltimate : Robot
     public double GridTrailingLockPercent { get; set; }
     [Parameter("Distance", DefaultValue = 15.0, MinValue = 15.0, MaxValue = 30.0, Group = "Grid")]
     public double GridDistanceAmount { get; set; }
+    [Parameter("Initial Entries (incl. Manual)", DefaultValue = 3, MinValue = 1, Group = "Grid")]
+    public int GridInitialEntries { get; set; }
+    [Parameter("Distance Increment (pips)", DefaultValue = 50.0, MinValue = 0, Group = "Grid")]
+    public double GridDistanceIncrementPips { get; set; }
     [Parameter("Use ATR Distance", DefaultValue = false, Group = "Grid")]
     public bool GridUseAtrDistance { get; set; }
     [Parameter("Use ATR Scaling", DefaultValue = false, Group = "Grid")]
@@ -149,7 +153,7 @@ public partial class APFXUltimate : Robot
     [Parameter("Show Bollinger Bands", DefaultValue = false, Group = "Graph")]
     public bool ShowBollingerBands { get; set; }
 
-    [Parameter("Show Daily VWAP", DefaultValue = false, Group = "Graph")]
+    [Parameter("Show Daily VWAP", DefaultValue = true, Group = "Graph")]
     public bool ShowDailyVwap { get; set; }
 
     [Parameter("Show Previous Levels", DefaultValue = false, Group = "Graph")]
@@ -424,7 +428,7 @@ public partial class APFXUltimate : Robot
             sendHttpRequest: (request, callback) => Http.SendAsync(request, callback),
             beginInvokeOnMainThread: action => BeginInvokeOnMainThread(action));
 
-        var gridTrading = new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtrDistance, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent, GridMaxDrawdownAmount), gridStatus, ShowTradePreview);
+        var gridTrading = new GridTradingModule(new GridConfiguration(GridEnabled, GridDirection, GridTargetProfit, GridTrailingLockPercent, GridDistanceAmount, GridUseAtrDistance, GridUseAtr, GridAtrPeriod, GridMaxDrawdownPercent, GridMaxDrawdownAmount, GridInitialEntries, GridDistanceIncrementPips), gridStatus, ShowTradePreview);
 
         Positions.Closed += OnPositionClosed;
         _modules = new RobotModuleRunner(new IRobotModule[]

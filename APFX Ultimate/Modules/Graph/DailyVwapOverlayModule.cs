@@ -8,6 +8,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
     private readonly HashSet<string> _objectNames = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Queue<string>> _segmentNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Text, double Price, Color Color)> _labels = new(StringComparer.Ordinal);
     private RobotContext? _context;
     private DateTime _nextRefreshAt = DateTime.MinValue;
     private DateTime _renderedSessionDate = DateTime.MinValue;
@@ -24,7 +25,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         Render(force: true);
     }
 
-    public void OnTick(RobotContext context) { }
+    public void OnTick(RobotContext context) => RefreshLabels();
     public void OnTimer(RobotContext context) => Render(force: false);
 
     public void OnStop(RobotContext context)
@@ -63,6 +64,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
             UpdateLatestSegments(data);
         }
 
+        RefreshLabels();
         _nextRefreshAt = _context.ServerTime.Add(RefreshInterval);
     }
 
@@ -136,11 +138,43 @@ public sealed class DailyVwapOverlayModule : IRobotModule
 
     private void DrawLabel(string key, string? label, IReadOnlyList<ChartTimePricePoint> sampledPoints, Color color, HashSet<string>? activeNames)
     {
-        if (label is not null && sampledPoints.Count > 0)
+        var labelName = ObjectPrefix + key + ".Label";
+        if (sampledPoints.Count > 0)
         {
-            var labelName = ObjectPrefix + key + ".Label";
-            _context!.DrawChartText(labelName, label, _context.GetChartViewport().EndTime, sampledPoints[^1].Price, color);
+            var text = label ?? key switch
+            {
+                "UpperOne" => "VWAP +1 SD", "LowerOne" => "VWAP -1 SD",
+                "UpperTwo" => "VWAP +2 SD", "LowerTwo" => "VWAP -2 SD",
+                "UpperThree" => "VWAP +3 SD", "LowerThree" => "VWAP -3 SD",
+                "UpperFour" => "VWAP +4 SD", "LowerFour" => "VWAP -4 SD",
+                _ => key
+            };
+            _labels[labelName] = (text, sampledPoints[^1].Price, color);
+            _objectNames.Add(labelName);
             activeNames?.Add(labelName);
+        }
+        else
+        {
+            _labels.Remove(labelName);
+            _objectNames.Remove(labelName);
+            _context!.RemoveChartObject(labelName);
+        }
+    }
+
+    private void RefreshLabels()
+    {
+        if (_context is null || !IsEnabled || _labels.Count == 0) return;
+        var market = _context.GetMarketSnapshot();
+        var time = _context.GetChartViewport().EndTime;
+        var hasDistance = double.IsFinite(market.Bid) && market.Bid > 0
+            && double.IsFinite(market.PipSize) && market.PipSize > 0;
+        foreach (var (name, label) in _labels)
+        {
+            var distance = hasDistance
+                ? FormattableString.Invariant($" | {Math.Abs(label.Price - market.Bid) / market.PipSize:F0} pips")
+                : " | -- pips";
+            var text = FormattableString.Invariant($"{label.Text} | {label.Price:F0}") + distance;
+            _context.DrawChartText(name, text, time, label.Price, label.Color);
         }
     }
 
@@ -176,6 +210,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         foreach (var staleName in _objectNames.Except(activeNames).ToArray())
         {
             _context!.RemoveChartObject(staleName);
+            _labels.Remove(staleName);
         }
 
         _objectNames.Clear();
@@ -188,6 +223,7 @@ public sealed class DailyVwapOverlayModule : IRobotModule
         foreach (var name in _objectNames) _context.RemoveChartObject(name);
         _objectNames.Clear();
         _segmentNames.Clear();
+        _labels.Clear();
         _renderedSessionDate = DateTime.MinValue;
     }
 }

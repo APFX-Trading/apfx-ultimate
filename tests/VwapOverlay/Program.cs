@@ -7,9 +7,10 @@ var overlay = new DailyVwapOverlayModule(isEnabled: true);
 fixture.PointCount = 400;
 fixture.Now = fixture.Start.AddMinutes(399);
 overlay.OnStart(fixture.Context);
-if (fixture.Objects.Count > 9 * 59 + 1)
-    throw new Exception($"VWAP drew {fixture.Objects.Count} startup objects; expected at most 532.");
+if (fixture.Objects.Count > 9 * 59 + 9)
+    throw new Exception($"VWAP drew {fixture.Objects.Count} startup objects; expected at most 540.");
 fixture.AssertFourthBands();
+fixture.AssertLabels();
 
 overlay.OnStop(fixture.Context);
 fixture.PointCount = 2;
@@ -24,23 +25,55 @@ for (var minute = 3; minute <= 400; minute++)
     overlay.OnTimer(fixture.Context);
 }
 
-if (fixture.Objects.Count > 9 * 59 + 1)
-    throw new Exception($"VWAP retained {fixture.Objects.Count} chart objects; expected at most 532.");
+if (fixture.Objects.Count > 9 * 59 + 9)
+    throw new Exception($"VWAP retained {fixture.Objects.Count} chart objects; expected at most 540.");
 fixture.AssertFourthBands();
+fixture.AssertLabels();
+
+var reads = fixture.DataReads;
+fixture.Market = fixture.Market with { Bid = 1.105, Ask = 1.1052 };
+overlay.OnTick(fixture.Context);
+fixture.AssertLabels();
+if (fixture.DataReads != reads)
+    throw new Exception("Tick label updates must not recalculate the VWAP paths.");
+fixture.Market = fixture.Market with { PipSize = 0.001 };
+overlay.OnTick(fixture.Context);
+fixture.AssertLabels();
 
 fixture.Start = fixture.Start.AddDays(1);
 fixture.Now = fixture.Start.AddMinutes(1);
 fixture.PointCount = 2;
 overlay.OnTimer(fixture.Context);
-if (fixture.Objects.Count != 10)
+if (fixture.Objects.Count != 18)
     throw new Exception($"VWAP retained stale objects after the session changed: {fixture.Objects.Count}.");
 fixture.AssertFourthBands();
+fixture.AssertLabels();
 
 overlay.SetEnabled(false);
 if (fixture.Objects.Count != 0)
     throw new Exception("Disabling VWAP must remove all bands.");
+overlay.OnTick(fixture.Context);
+if (fixture.Objects.Count != 0 || fixture.Labels.Count != 0)
+    throw new Exception("Tick updates must not restore disabled labels.");
 overlay.SetEnabled(true);
 fixture.AssertFourthBands();
+fixture.AssertLabels();
+
+fixture.Market = fixture.Market with { PipSize = 0 };
+overlay.OnTick(fixture.Context);
+if (fixture.Labels.Values.Any(text => !text.EndsWith(" | -- pips", StringComparison.Ordinal)))
+    throw new Exception("Invalid pip size must display unavailable distance.");
+fixture.Market = fixture.Market with { PipSize = 0.0001 };
+fixture.PointCount = 0;
+fixture.Now = fixture.Now.AddSeconds(5);
+overlay.OnTimer(fixture.Context);
+overlay.OnTick(fixture.Context);
+if (fixture.Objects.Count != 0 || fixture.Labels.Count != 0)
+    throw new Exception("Empty VWAP data must remove paths and labels.");
+fixture.PointCount = 2;
+fixture.Now = fixture.Now.AddSeconds(5);
+overlay.OnTimer(fixture.Context);
+fixture.AssertLabels();
 
 overlay.OnStop(fixture.Context);
 if (fixture.Objects.Count != 0)
@@ -53,7 +86,10 @@ sealed class VwapFixture
     public DateTime Start = new(2026, 9, 21, 0, 0, 0);
     public DateTime Now;
     public int PointCount = 2;
+    public int DataReads;
+    public MarketSnapshot Market = new() { Bid = 1.1, Ask = 1.1002, PipSize = 0.0001 };
     public HashSet<string> Objects { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> Labels { get; } = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _endPrices = new(StringComparer.Ordinal);
     public RobotContext Context { get; }
 
@@ -65,10 +101,11 @@ sealed class VwapFixture
             ["log"] = (Action<string>)(_ => { }),
             ["getServerTime"] = (Func<DateTime>)(() => Now),
             ["getDailyVwapData"] = (Func<DailyVwapData>)GetData,
+            ["getMarketSnapshot"] = (Func<MarketSnapshot>)(() => Market),
             ["getChartViewport"] = (Func<ChartViewport>)(() => new(Start, Now, 1, 2)),
             ["drawChartTrendLine"] = (Action<string, DateTime, double, DateTime, double, Color, int>)((name, _, _, _, endPrice, _, _) => { Objects.Add(name); _endPrices[name] = endPrice; }),
-            ["drawChartText"] = (Action<string, string, DateTime, double, Color>)((name, _, _, _, _) => Objects.Add(name)),
-            ["removeChartObject"] = (Action<string>)(name => { Objects.Remove(name); _endPrices.Remove(name); })
+            ["drawChartText"] = (Action<string, string, DateTime, double, Color>)((name, text, _, price, _) => { Objects.Add(name); Labels[name] = text; _endPrices[name] = price; }),
+            ["removeChartObject"] = (Action<string>)(name => { Objects.Remove(name); _endPrices.Remove(name); Labels.Remove(name); })
         };
 
         var constructor = typeof(RobotContext).GetConstructors().Single();
@@ -84,11 +121,30 @@ sealed class VwapFixture
 
     private DailyVwapData GetData()
     {
+        DataReads++;
         IReadOnlyList<ChartTimePricePoint> Band(double offset) => Enumerable.Range(0, PointCount)
             .Select(index => new ChartTimePricePoint(Start.AddMinutes(index), 1.1 + offset + index * 0.00001))
             .ToArray();
 
         return new DailyVwapData(Band(0), Band(0.001), Band(-0.001), Band(0.002), Band(-0.002), Band(0.003), Band(-0.003), Band(0.004), Band(-0.004));
+    }
+
+    public void AssertLabels()
+    {
+        if (Labels.Count != 9) throw new Exception($"Expected nine VWAP labels, got {Labels.Count}.");
+        var bands = new[] { ("Vwap", "Daily VWAP", 0d),
+            ("UpperOne", "VWAP +1 SD", 0.001), ("LowerOne", "VWAP -1 SD", -0.001),
+            ("UpperTwo", "VWAP +2 SD", 0.002), ("LowerTwo", "VWAP -2 SD", -0.002),
+            ("UpperThree", "VWAP +3 SD", 0.003), ("LowerThree", "VWAP -3 SD", -0.003),
+            ("UpperFour", "VWAP +4 SD", 0.004), ("LowerFour", "VWAP -4 SD", -0.004) };
+        foreach (var (key, title, offset) in bands)
+        {
+            var name = $"APFXUltimate.Graph.Vwap.{key}.Label";
+            var price = 1.1 + offset + (PointCount - 1) * 0.00001;
+            var expected = FormattableString.Invariant($"{title} | {price:F0} | {Math.Abs(price - Market.Bid) / Market.PipSize:F0} pips");
+            if (Labels[name] != expected || Math.Abs(_endPrices[name] - price) > 1e-12)
+                throw new Exception($"{key}: expected {expected}, got {Labels[name]}.");
+        }
     }
 
     public void AssertFourthBands()

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using cAlgo.API;
 using cAlgo.Robots;
 
@@ -103,7 +104,78 @@ module = fixture.CreateModule(GridDirection.Both, previewEnabled: false);
 module.OnStart(fixture.Context);
 fixture.ExpectCount(2); // Panel override also persists when the default is off.
 module.OnStop(fixture.Context);
+CheckProgressiveSpacing();
 Console.WriteLine("Grid preview regression checks passed.");
+
+static void CheckProgressiveSpacing()
+{
+    var distanceMethod = typeof(GridTradingModule).GetMethod("GetEffectiveDistance",
+        BindingFlags.NonPublic | BindingFlags.Instance, null,
+        new[] { typeof(MarketSnapshot), typeof(int), typeof(double) }, null)!;
+    var priceMethod = typeof(GridTradingModule).GetMethod("GetNextPendingPrice", BindingFlags.NonPublic | BindingFlags.Static)!;
+    var config = new GridConfiguration(true, GridDirection.Both, 20, 80, 20, false, false, 14, 10, 0);
+    var market = new MarketSnapshot() with { PipSize = 1, PipValue = 1 };
+
+    double Distance(GridConfiguration settings, int count, double volume = 1, double atrPips = 0)
+    {
+        // A fresh instance for every calculation also checks recovery from the open
+        // entry count rather than dependence on an in-memory submitted-order counter.
+        var grid = new GridTradingModule(settings, new GridStatus());
+        return (double)distanceMethod.Invoke(grid, new object[] { market with { AtrPips = atrPips }, count, volume })!;
+    }
+    void Expect(double actual, double expected)
+    {
+        if (Math.Abs(actual - expected) > 1e-8)
+            throw new Exception($"Grid spacing: expected {expected}, got {actual}.");
+    }
+
+    foreach (var direction in new[] { TradeType.Sell, TradeType.Buy })
+    {
+        var sign = direction == TradeType.Sell ? 1 : -1;
+        var positions = new List<Position>();
+        var price = 52300d;
+        foreach (var offset in new[] { 20d, 40d, 110d, 230d, 400d, 620d })
+        {
+            positions.Add(SpacingPositionProxy.Make(price));
+            var amount = Distance(config, positions.Count);
+            price = (double)priceMethod.Invoke(null, new object[] { direction, positions, amount / market.PipValue * market.PipSize })!;
+            Expect(price, 52300 + sign * offset);
+        }
+    }
+
+    Expect(Distance(config, 0), 20);
+    Expect(Distance(config with { InitialEntries = 1 }, 1), 70);
+    Expect(Distance(config with { InitialEntries = 4 }, 3), 20);
+    Expect(Distance(config with { InitialEntries = 4 }, 4), 70);
+    Expect(Distance(config with { DistanceIncrementPips = 0 }, 100), 20);
+    Expect(Distance(config with { DistanceIncrementPips = 5 }, 3), 25);
+    Expect(Distance(config with { DistanceIncrementPips = 5 }, 7), 45);
+    Expect(Distance(config with { DistanceAmount = 1 }, 1), 15);
+    Expect(Distance(config with { DistanceAmount = 100 }, 1), 30);
+    Expect(Distance(config, 3, volume: 2), 120);
+    Expect(Distance(config, 3, volume: 0.1), 25);
+    foreach (var atr in new[] { 0d, 64d, 150d, 250d, 400d })
+    {
+        Expect(Distance(config with { UseAtrDistance = true }, 1, atrPips: atr), Math.Clamp(atr * 0.1, 15, 30));
+        foreach (var count in new[] { 3, 4, 5 })
+            Expect(Distance(config with { UseAtrDistance = true }, count, atrPips: atr),
+                Math.Clamp(atr * 0.1, 15, 30) + (count - 2) * 50);
+    }
+    Console.WriteLine("Progressive grid spacing regression checks passed.");
+}
+
+public class SpacingPositionProxy : DispatchProxy
+{
+    private double _price;
+    public static Position Make(double price)
+    {
+        var position = Create<Position, SpacingPositionProxy>();
+        ((SpacingPositionProxy)(object)position)._price = price;
+        return position;
+    }
+    protected override object? Invoke(MethodInfo? method, object?[]? args) => method?.Name == "get_EntryPrice"
+        ? _price : throw new Exception($"Unexpected position API call: {method?.Name}");
+}
 
 sealed class PreviewFixture
 {
@@ -165,8 +237,9 @@ sealed class PreviewFixture
 
     public void ExpectMatchingAtrAmounts(double expected)
     {
-        if (Status.EffectiveTarget != expected || Status.DistanceAmount != expected)
-            throw new Exception($"Expected target and distance {expected}, got {Status.EffectiveTarget}/{Status.DistanceAmount}.");
+        var distance = Math.Max(15, expected);
+        if (Status.EffectiveTarget != expected || Status.DistanceAmount != distance)
+            throw new Exception($"Expected target {expected} and distance {distance}, got {Status.EffectiveTarget}/{Status.DistanceAmount}.");
     }
 
     public void SeedLegacyPendingPreview()
